@@ -1,0 +1,255 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Rôles, comptes entreprise et utilisateurs (cf. cahier des charges §3.2)
+// ---------------------------------------------------------------------------
+
+enum RoleName {
+  ADMIN_PLATEFORME
+  MINI_ADMIN
+  CHEF_EQUIPE
+  CHAUFFEUR
+  UTILISATEUR
+}
+
+enum AccountStatus {
+  GRATUIT
+  PREMIUM
+  ENTREPRISE
+}
+
+model Role {
+  id                 String   @id @default(cuid())
+  name               RoleName @unique
+  niveauHierarchique Int
+
+  users User[]
+}
+
+model Company {
+  id          String    @id @default(cuid())
+  nom         String
+  miniAdminId String?   @unique
+  piloteDebut DateTime?
+  piloteFin   DateTime?
+  creeLe      DateTime  @default(now())
+
+  teams Team[]
+  users User[]
+}
+
+model Team {
+  id     String   @id @default(cuid())
+  nom    String
+  creeLe DateTime @default(now())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  users User[]
+}
+
+model User {
+  id             String        @id @default(cuid())
+  phoneOrEmail   String        @unique
+  passwordHash   String
+  accountStatus  AccountStatus @default(GRATUIT)
+  actif          Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
+
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id])
+
+  incidentsSignales Incident[]      @relation("IncidentReportedBy")
+  confirmations     Confirmation[]
+  itineraries       Itinerary[]
+  trips             Trip[]
+
+  @@index([companyId])
+  @@index([teamId])
+}
+
+// ---------------------------------------------------------------------------
+// Réseau routier (Routes Nationales et tronçons — cf. architecture technique §3)
+// ---------------------------------------------------------------------------
+
+model RouteAxis {
+  id         String  @id @default(cuid())
+  numero     String  @unique // ex. "N1", "N3", "N4"
+  nomCourant String?
+
+  segments RoadSegment[]
+}
+
+model RoadSegment {
+  id      String @id @default(cuid())
+  pkDebut Float?
+  pkFin   Float?
+
+  // Colonne géométrique PostGIS — non gérée nativement par Prisma.
+  // Insertion/lecture/requêtes spatiales via prisma.$queryRaw / $executeRaw.
+  geom Unsupported("geometry(LineString, 4326)")
+
+  routeAxisId String
+  routeAxis   RouteAxis @relation(fields: [routeAxisId], references: [id], onDelete: Cascade)
+
+  incidents          Incident[]
+  itinerarySegments  ItinerarySegment[]
+
+  @@index([routeAxisId])
+}
+
+// ---------------------------------------------------------------------------
+// Incidents et confirmation communautaire (cf. cahier des charges §4.3-4.4)
+// ---------------------------------------------------------------------------
+
+enum IncidentTypeLibelle {
+  ACCIDENT
+  PANNE
+  OBSTACLE
+  INSECURITE
+  URGENCE_MEDICALE
+}
+
+enum SensCirculation {
+  ALLER
+  RETOUR
+  LES_DEUX
+}
+
+enum EtatVoie {
+  BLOQUEE
+  PARTIELLE
+  DEGAGEE
+}
+
+enum StatutIncident {
+  ACTIF
+  RESOLU
+}
+
+model IncidentType {
+  id      String              @id @default(cuid())
+  libelle IncidentTypeLibelle @unique
+
+  incidents Incident[]
+}
+
+model Incident {
+  id                   String         @id @default(cuid())
+  sensCirculation      SensCirculation
+  etatVoie             EtatVoie
+  photoUrl             String?
+  statut               StatutIncident @default(ACTIF)
+  signaleLe            DateTime       @default(now())
+  derniereConfirmation DateTime       @default(now())
+
+  // Position géométrique — cf. remarque sur RoadSegment.geom
+  position Unsupported("geometry(Point, 4326)")
+
+  roadSegmentId String
+  roadSegment   RoadSegment @relation(fields: [roadSegmentId], references: [id])
+
+  incidentTypeId String
+  incidentType   IncidentType @relation(fields: [incidentTypeId], references: [id])
+
+  reportedById String?
+  reportedBy   User?   @relation("IncidentReportedBy", fields: [reportedById], references: [id])
+
+  confirmations Confirmation[]
+
+  @@index([roadSegmentId])
+  @@index([statut])
+}
+
+enum ConfirmationType {
+  TOUJOURS_LA
+  DEGAGE
+}
+
+model Confirmation {
+  id         String           @id @default(cuid())
+  type       ConfirmationType
+  horodatage DateTime         @default(now())
+
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([incidentId])
+}
+
+// ---------------------------------------------------------------------------
+// Itinéraires et trajets suivis (cf. cahier des charges §4.1)
+// ---------------------------------------------------------------------------
+
+model Itinerary {
+  id      String   @id @default(cuid())
+  favori  Boolean  @default(false)
+  creeLe  DateTime @default(now())
+
+  // Départ, arrivée et tracé calculé par OpenRouteService — cf. remarque sur RoadSegment.geom
+  pointDepart   Unsupported("geometry(Point, 4326)")
+  pointArrivee  Unsupported("geometry(Point, 4326)")
+  trace         Unsupported("geometry(LineString, 4326)")?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  segments ItinerarySegment[]
+  trips    Trip[]
+
+  @@index([userId])
+}
+
+model ItinerarySegment {
+  id String @id @default(cuid())
+
+  itineraryId String
+  itinerary   Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+
+  roadSegmentId String
+  roadSegment   RoadSegment @relation(fields: [roadSegmentId], references: [id])
+
+  @@index([itineraryId])
+  @@index([roadSegmentId])
+}
+
+enum StatutTrip {
+  EN_COURS
+  TERMINE
+  ABANDONNE
+}
+
+model Trip {
+  id         String     @id @default(cuid())
+  statut     StatutTrip @default(EN_COURS)
+  demarreLe  DateTime   @default(now())
+  termineLe  DateTime?
+
+  itineraryId String
+  itinerary   Itinerary @relation(fields: [itineraryId], references: [id])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([statut])
+}
+
+// Note : la limite « 1 itinéraire favori maximum en compte gratuit » est une
+// règle applicative vérifiée côté service, pas une contrainte de schéma.

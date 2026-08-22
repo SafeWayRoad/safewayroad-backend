@@ -1,0 +1,31 @@
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import morgan from "morgan";
+import { errorHandler } from "./shared/middlewares/error-handler";
+import healthRouter from "./modules/health/health.router";
+import incidentRouter from "./modules/incidents/incident.router";
+
+const app = express();
+
+app.use(helmet());
+app.use(cors());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
+
+app.use(express.json());
+app.use(morgan("dev"));
+
+app.use(healthRouter);
+app.use(incidentRouter);
+
+app.use(errorHandler);
+
+export default app;

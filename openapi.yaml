@@ -1,0 +1,606 @@
+openapi: 3.0.3
+info:
+  title: SafeWayRoad API
+  version: 0.1.0
+  description: >
+    Contrat d'API du MVP SafeWayRoad — signalement d'incidents et planification
+    de trajet sur les Routes Nationales du Cameroun. Ce document sert de mémo
+    de référence pendant le développement (Phase 0 → Phase 4 du plan de
+    développement) ; il évoluera au fil de l'implémentation réelle.
+
+servers:
+  - url: http://localhost:3000
+    description: Développement local
+
+tags:
+  - name: Santé
+  - name: Authentification
+  - name: Utilisateurs et rôles
+  - name: Entreprises (mini-admin)
+  - name: Incidents
+  - name: Itinéraires
+  - name: Trajets
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ---------------------------------------------------------------------
+  # Santé
+  # ---------------------------------------------------------------------
+  /health:
+    get:
+      tags: [Santé]
+      summary: Vérifie la connexion à la base de données et la présence de PostGIS
+      security: []
+      responses:
+        "200":
+          description: Service opérationnel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Base de données injoignable
+
+  # ---------------------------------------------------------------------
+  # Authentification — non implémenté (Phase 1)
+  # ---------------------------------------------------------------------
+  /auth/register:
+    post:
+      tags: [Authentification]
+      summary: Inscription d'un usager individuel (compte gratuit par défaut)
+      description: "Planifié Phase 1 — non implémenté."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneOrEmail, password]
+              properties:
+                phoneOrEmail: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        "201":
+          description: Compte créé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  /auth/login:
+    post:
+      tags: [Authentification]
+      summary: Connexion (retourne un access token et un refresh token)
+      description: "Planifié Phase 1 — non implémenté."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneOrEmail, password]
+              properties:
+                phoneOrEmail: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Connexion réussie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Identifiants invalides
+
+  /auth/refresh:
+    post:
+      tags: [Authentification]
+      summary: Renouvelle un access token à partir du refresh token
+      description: "Planifié Phase 1 — non implémenté."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          description: Nouveau access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+
+  # ---------------------------------------------------------------------
+  # Utilisateurs et rôles — non implémenté (Phase 1 / Phase 3)
+  # ---------------------------------------------------------------------
+  /users/me:
+    get:
+      tags: [Utilisateurs et rôles]
+      summary: Profil de l'utilisateur connecté
+      description: "Planifié Phase 1 — non implémenté."
+      responses:
+        "200":
+          description: Profil utilisateur
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+    patch:
+      tags: [Utilisateurs et rôles]
+      summary: Met à jour le profil de l'utilisateur connecté
+      description: "Planifié Phase 1 — non implémenté."
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phoneOrEmail: { type: string }
+
+      responses:
+        "200":
+          description: Profil mis à jour
+
+  /users/{id}/status:
+    patch:
+      tags: [Utilisateurs et rôles]
+      summary: Active manuellement un statut de compte (gratuit/premium/entreprise)
+      description: >
+        Réservé à l'administrateur plateforme. Utilisé en back-office pour
+        activer un compte payant après un paiement reçu hors plateforme
+        (virement bancaire) — cf. cahier des charges §7.5. Planifié Phase 3.
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accountStatus]
+              properties:
+                accountStatus:
+                  $ref: "#/components/schemas/AccountStatus"
+      responses:
+        "200":
+          description: Statut mis à jour
+
+  # ---------------------------------------------------------------------
+  # Entreprises (mini-admin) — non implémenté (Phase 3)
+  # ---------------------------------------------------------------------
+  /companies:
+    post:
+      tags: [Entreprises (mini-admin)]
+      summary: Crée une entreprise partenaire du pilote et son compte mini-admin
+      description: "Réservé à l'administrateur plateforme. Planifié Phase 3."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nom, miniAdminPhoneOrEmail]
+              properties:
+                nom: { type: string }
+                miniAdminPhoneOrEmail: { type: string }
+      responses:
+        "201":
+          description: Entreprise créée
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Company"
+
+  /companies/{id}/stats:
+    get:
+      tags: [Entreprises (mini-admin)]
+      summary: Statistiques agrégées de l'entreprise (trajets, signalements, activité par équipe)
+      description: "Réservé au mini-admin de l'entreprise concernée. Planifié Phase 3."
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Statistiques
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompanyStats"
+
+  /companies/{id}/teams:
+    post:
+      tags: [Entreprises (mini-admin)]
+      summary: Crée une équipe et son chef d'équipe au sein de l'entreprise
+      description: "Réservé au mini-admin. Planifié Phase 3."
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nom, chefEquipePhoneOrEmail]
+              properties:
+                nom: { type: string }
+                chefEquipePhoneOrEmail: { type: string }
+      responses:
+        "201":
+          description: Équipe créée
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+
+  /teams/{id}/drivers:
+    post:
+      tags: [Entreprises (mini-admin)]
+      summary: Crée un compte chauffeur rattaché à l'équipe
+      description: "Réservé au chef d'équipe de cette équipe. Planifié Phase 3."
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneOrEmail, password]
+              properties:
+                phoneOrEmail: { type: string }
+                password: { type: string }
+      responses:
+        "201":
+          description: Chauffeur créé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /teams/{id}/users/{userId}:
+    patch:
+      tags: [Entreprises (mini-admin)]
+      summary: Active ou désactive un compte de l'équipe
+      description: "Réservé au chef d'équipe ou au mini-admin. Planifié Phase 3."
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actif: { type: boolean }
+      responses:
+        "200":
+          description: Compte mis à jour
+
+  # ---------------------------------------------------------------------
+  # Incidents — implémenté (exemple de référence dans incident.router.ts)
+  # ---------------------------------------------------------------------
+  /incidents:
+    get:
+      tags: [Incidents]
+      summary: Liste les incidents actifs
+      security: []
+      responses:
+        "200":
+          description: Liste des incidents actifs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Incident"
+
+    post:
+      tags: [Incidents]
+      summary: Signale un nouvel incident (accessible avec ou sans compte)
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                [roadSegmentId, incidentTypeId, latitude, longitude, sensCirculation, etatVoie]
+              properties:
+                roadSegmentId: { type: string }
+                incidentTypeId: { type: string }
+                latitude: { type: number }
+                longitude: { type: number }
+                sensCirculation:
+                  $ref: "#/components/schemas/SensCirculation"
+                etatVoie:
+                  $ref: "#/components/schemas/EtatVoie"
+                photo:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Incident créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/Incident"
+        "422":
+          description: Corps de requête invalide
+
+  /incidents/{id}/confirmations:
+    post:
+      tags: [Incidents]
+      summary: Confirme qu'un incident est toujours présent ou a été dégagé
+      description: "Planifié Phase 2 — non implémenté."
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  $ref: "#/components/schemas/ConfirmationType"
+      responses:
+        "201":
+          description: Confirmation enregistrée
+
+  # ---------------------------------------------------------------------
+  # Itinéraires — non implémenté (Phase 2)
+  # ---------------------------------------------------------------------
+  /itineraries:
+    post:
+      tags: [Itinéraires]
+      summary: Calcule un itinéraire (via OpenRouteService) et superpose les incidents actifs
+      description: "Planifié Phase 2 — non implémenté."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [depart, arrivee]
+              properties:
+                depart:
+                  $ref: "#/components/schemas/LatLng"
+                arrivee:
+                  $ref: "#/components/schemas/LatLng"
+      responses:
+        "201":
+          description: Itinéraire calculé
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Itinerary"
+
+  /itineraries/{id}/favorite:
+    post:
+      tags: [Itinéraires]
+      summary: Enregistre l'itinéraire en favori (limite 1 en compte gratuit)
+      description: "Planifié Phase 2 — non implémenté."
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Itinéraire marqué favori
+        "403":
+          description: Limite de favoris atteinte pour un compte gratuit
+
+  # ---------------------------------------------------------------------
+  # Trajets — non implémenté (Phase 4)
+  # ---------------------------------------------------------------------
+  /trips:
+    post:
+      tags: [Trajets]
+      summary: Démarre le suivi d'un trajet en cours
+      description: "Planifié Phase 4 — non implémenté."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [itineraryId]
+              properties:
+                itineraryId: { type: string }
+      responses:
+        "201":
+          description: Trajet démarré
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trip"
+
+  /trips/{id}:
+    patch:
+      tags: [Trajets]
+      summary: Termine ou abandonne un trajet en cours
+      description: "Planifié Phase 4 — non implémenté."
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                statut:
+                  $ref: "#/components/schemas/StatutTrip"
+      responses:
+        "200":
+          description: Trajet mis à jour
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: boolean }
+        service: { type: string }
+        database:
+          type: object
+          properties:
+            connected: { type: boolean }
+            postgisVersion: { type: string }
+            error: { type: string }
+        timestamp: { type: string, format: date-time }
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        user:
+          $ref: "#/components/schemas/User"
+
+    AccountStatus:
+      type: string
+      enum: [GRATUIT, PREMIUM, ENTREPRISE]
+
+    RoleName:
+      type: string
+      enum: [ADMIN_PLATEFORME, MINI_ADMIN, CHEF_EQUIPE, CHAUFFEUR, UTILISATEUR]
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        phoneOrEmail: { type: string }
+        accountStatus:
+          $ref: "#/components/schemas/AccountStatus"
+        role:
+          $ref: "#/components/schemas/RoleName"
+        companyId: { type: string, nullable: true }
+        teamId: { type: string, nullable: true }
+        actif: { type: boolean }
+
+    Company:
+      type: object
+      properties:
+        id: { type: string }
+        nom: { type: string }
+        miniAdminId: { type: string }
+        piloteDebut: { type: string, format: date, nullable: true }
+        piloteFin: { type: string, format: date, nullable: true }
+
+    Team:
+      type: object
+      properties:
+        id: { type: string }
+        nom: { type: string }
+        companyId: { type: string }
+
+    CompanyStats:
+      type: object
+      properties:
+        chauffeursActifs: { type: integer }
+        trajetsCeMois: { type: integer }
+        signalements: { type: integer }
+        incidentsEnCours: { type: integer }
+
+    LatLng:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude: { type: number }
+        longitude: { type: number }
+
+    SensCirculation:
+      type: string
+      enum: [ALLER, RETOUR, LES_DEUX]
+
+    EtatVoie:
+      type: string
+      enum: [BLOQUEE, PARTIELLE, DEGAGEE]
+
+    StatutIncident:
+      type: string
+      enum: [ACTIF, RESOLU]
+
+    ConfirmationType:
+      type: string
+      enum: [TOUJOURS_LA, DEGAGE]
+
+    Incident:
+      type: object
+      properties:
+        id: { type: string }
+        roadSegmentId: { type: string }
+        incidentTypeId: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        sensCirculation:
+          $ref: "#/components/schemas/SensCirculation"
+        etatVoie:
+          $ref: "#/components/schemas/EtatVoie"
+        photoUrl: { type: string, nullable: true }
+        statut:
+          $ref: "#/components/schemas/StatutIncident"
+        signaleLe: { type: string, format: date-time }
+        derniereConfirmation: { type: string, format: date-time }
+
+    Itinerary:
+      type: object
+      properties:
+        id: { type: string }
+        pointDepart:
+          $ref: "#/components/schemas/LatLng"
+        pointArrivee:
+          $ref: "#/components/schemas/LatLng"
+        favori: { type: boolean }
+        incidentsSurTrajet:
+          type: array
+          items:
+            $ref: "#/components/schemas/Incident"
+
+    StatutTrip:
+      type: string
+      enum: [EN_COURS, TERMINE, ABANDONNE]
+
+    Trip:
+      type: object
+      properties:
+        id: { type: string }
+        itineraryId: { type: string }
+        statut:
+          $ref: "#/components/schemas/StatutTrip"
+        demarreLe: { type: string, format: date-time }
+        termineLe: { type: string, format: date-time, nullable: true }
