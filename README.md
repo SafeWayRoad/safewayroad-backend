@@ -42,40 +42,48 @@ Les deux sont visibles dans le dashboard Neon → bouton "Connect" → bascule "
 
 ---
 
-## 🗺️ 3. Activer PostGIS (une seule fois, avant la première migration)
+## 🗄️ 3. Base de données — migration Prisma (tout depuis le terminal)
 
-PostGIS n'est pas activé par défaut sur une base Neon. Avant la première migration, exécute :
+Prisma ne connaît pas nativement PostGIS (extension) ni les index spatiaux GiST : ces deux éléments
+doivent être ajoutés à la main **dans le fichier de migration généré**, pas exécutés séparément dans
+un éditeur SQL externe. Tout reste ainsi piloté par `prisma migrate`, comme demandé.
 
-```sql
--- Contenu de prisma/sql/enable-postgis.sql
-CREATE EXTENSION IF NOT EXISTS postgis;
-```
-
-Le plus simple : copie ce contenu dans l'onglet **"SQL Editor"** du dashboard Neon et clique sur "Run".
-
----
-
-## 🗄️ 4. Base de données — migration Prisma
+**1. Générer la migration sans l'appliquer :**
 
 ```bash
 npx prisma generate
-npx prisma migrate dev --name init
+npx prisma migrate dev --name init --create-only
 ```
 
-Cette commande crée les tables selon `prisma/schema.prisma` et génère le client Prisma.
+Cela crée un fichier `prisma/migrations/<timestamp>_init/migration.sql`, sans le lancer contre Neon.
 
-**Ensuite**, ajoute les index spatiaux (Prisma ne les génère pas automatiquement pour les colonnes géométriques) :
+**2. Éditer ce fichier généré :**
 
-```sql
--- Contenu de prisma/sql/spatial-indexes.sql, à coller dans le SQL Editor Neon
-CREATE INDEX IF NOT EXISTS idx_road_segment_geom ON "RoadSegment" USING GIST (geom);
-CREATE INDEX IF NOT EXISTS idx_incident_position ON "Incident" USING GIST (position);
--- (voir le fichier complet pour les autres colonnes)
+- Ajouter tout en haut, avant tout `CREATE TABLE` :
+  ```sql
+  CREATE EXTENSION IF NOT EXISTS postgis;
+  ```
+- Ajouter tout en bas, après les `CREATE TABLE` :
+  ```sql
+  CREATE INDEX idx_road_segment_geom ON "RoadSegment" USING GIST (geom);
+  CREATE INDEX idx_incident_position ON "Incident" USING GIST (position);
+  CREATE INDEX idx_itinerary_point_depart ON "Itinerary" USING GIST ("pointDepart");
+  CREATE INDEX idx_itinerary_point_arrivee ON "Itinerary" USING GIST ("pointArrivee");
+  CREATE INDEX idx_itinerary_trace ON "Itinerary" USING GIST (trace);
+  ```
+
+**3. Appliquer la migration :**
+
+```bash
+npx prisma migrate dev
 ```
+
+Prisma détecte la migration en attente et l'applique — extension PostGIS, tables et index spatiaux
+sont créés en une seule commande.
 
 ---
 
-## ▶️ 5. Lancer le serveur de développement
+## ▶️ 4. Lancer le serveur de développement
 
 ```bash
 npm run dev
@@ -115,9 +123,12 @@ src/
       incident.service.ts         Pattern Prisma + raw SQL pour les colonnes géométriques
 prisma/
   schema.prisma                  Modèle de données (cf. architecture technique §3)
-  sql/
-    enable-postgis.sql            À exécuter une fois, avant la 1ère migration
-    spatial-indexes.sql           À exécuter une fois, après la 1ère migration
+  migrations/
+    <timestamp>_init/
+      migration.sql               Migration éditée manuellement (extension PostGIS + index GiST)
+openapi.yaml                     Contrat d'API complet du MVP
+GIT_WORKFLOW.md                  Stratégie de branches, commits et versions
+CHANGELOG.md                     Historique des versions (Keep a Changelog)
 ```
 
 ---
@@ -167,4 +178,3 @@ git push -u origin develop
 
 Puis, sur GitHub : configurer la protection de `main` et créer les labels/milestones — voir §6 de
 `GIT_WORKFLOW.md`, ou exécuter `scripts/setup-github.sh` (nécessite [GitHub CLI](https://cli.github.com)).
-
