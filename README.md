@@ -1,101 +1,86 @@
 # SafeWayRoad — Backend
 
-API backend de SafeWayRoad : signalement d'incidents et planification de trajet sur les Routes Nationales du Cameroun.
-Stack : Express, TypeScript, Prisma (via l'adaptateur Neon serverless), PostgreSQL/PostGIS, Cloudflare R2.
+Plateforme de signalement d'incidents routiers et d'assistance aux usagers des Routes Nationales du Cameroun.
 
-Structure alignée sur le projet `ecommerce-api` (Prisma + Neon + R2 + validation Zod).
-
----
-
-## 📋 Prérequis
-
-- **Node.js** 18+
-- Un compte **[Neon](https://neon.tech)** (déjà créé)
-- Un compte **[Cloudflare R2](https://developers.cloudflare.com/r2/)** (déjà créé)
-- Un compte **[OpenRouteService](https://openrouteservice.org)** (déjà créé)
-- Un compte **[MapTiler](https://maptiler.com)** (déjà créé — utilisé côté frontend, la clé est centralisée ici)
+API backend : signalement d'incidents géolocalisés, planification de trajet avec superposition des
+incidents actifs, et gestion des comptes hiérarchiques (mini-admin → chef d'équipe → chauffeur) pour
+les entreprises partenaires de la phase pilote.
 
 ---
 
-## 🚀 1. Installation
+## 📚 Documentation du projet
+
+| Document                                   | Contenu                                                |
+| ------------------------------------------ | ------------------------------------------------------ |
+| `cahier_des_charges_fonctionnel.docx`      | Fonctionnalités, rôles, modèle économique              |
+| `architecture_technique_safewayroad.md`    | Stack, modèle de données, flux, diagrammes Mermaid     |
+| `plan_developpement_safewayroad_solo.docx` | Calendrier de développement et jalons                  |
+| [`openapi.yaml`](./openapi.yaml)           | Contrat d'API complet du MVP                           |
+| [`GIT_WORKFLOW.md`](./GIT_WORKFLOW.md)     | Stratégie de branches, convention de commits, versions |
+| [`CHANGELOG.md`](./CHANGELOG.md)           | Historique des versions publiées                       |
+
+---
+
+## 🧱 Stack technique
+
+- **Runtime** : Node.js, TypeScript, Express
+- **Base de données** : PostgreSQL + PostGIS (hébergée sur Neon, adaptateur serverless), via Prisma
+- **Stockage** : Cloudflare R2 (photos d'incidents)
+- **Routing** : OpenRouteService
+- **Cartographie** (frontend) : MapLibre GL + tuiles MapTiler
+- **Validation** : Zod
+
+---
+
+## 🚀 Démarrage rapide
+
+### Prérequis
+
+- Node.js 18+
+- Comptes Neon, Cloudflare R2, OpenRouteService et MapTiler
+
+### Installation
 
 ```bash
 npm install
-```
-
----
-
-## ⚙️ 2. Configuration des variables d'environnement
-
-```bash
 cp .env.example .env
 ```
 
-Remplis les valeurs dans `.env`. Deux chaînes de connexion Neon sont nécessaires :
+Renseigne les valeurs dans `.env`. Deux chaînes de connexion Neon sont nécessaires :
+`DATABASE_URL` (pooled, utilisée à l'exécution) et `MIGRATE_DATABASE_URL` (directe, pour les
+migrations) — les deux sont visibles dans le dashboard Neon → "Connect".
 
-- `DATABASE_URL` — la chaîne **"pooled"**, utilisée à l'exécution par l'API
-- `MIGRATE_DATABASE_URL` — la chaîne **directe** (non poolée), nécessaire pour les migrations Prisma (les opérations DDL passent mal par le pooler PgBouncer de Neon)
+> ⚠️ `JWT_SECRET` doit faire au moins 32 caractères, sinon le serveur refuse de démarrer.
 
-Les deux sont visibles dans le dashboard Neon → bouton "Connect" → bascule "Pooled connection".
+### Base de données
 
-> ⚠️ `JWT_SECRET` doit faire **au moins 32 caractères**, sinon le serveur refuse de démarrer (validation Zod dans `src/shared/config/env.ts`).
-
----
-
-## 🗄️ 3. Base de données — migration Prisma (tout depuis le terminal)
-
-Prisma ne connaît pas nativement PostGIS (extension) ni les index spatiaux GiST : ces deux éléments
-doivent être ajoutés à la main **dans le fichier de migration généré**, pas exécutés séparément dans
-un éditeur SQL externe. Tout reste ainsi piloté par `prisma migrate`, comme demandé.
-
-**1. Générer la migration sans l'appliquer :**
+Prisma ne connaît pas nativement PostGIS ni les index spatiaux GiST : ils sont ajoutés à la main
+dans le fichier de migration généré (voir le point technique ci-dessous), pas exécutés séparément
+dans un éditeur SQL — tout reste piloté par `prisma migrate`.
 
 ```bash
 npx prisma generate
 npx prisma migrate dev --name init --create-only
-```
-
-Cela crée un fichier `prisma/migrations/<timestamp>_init/migration.sql`, sans le lancer contre Neon.
-
-**2. Éditer ce fichier généré :**
-
-- Ajouter tout en haut, avant tout `CREATE TABLE` :
-  ```sql
-  CREATE EXTENSION IF NOT EXISTS postgis;
-  ```
-- Ajouter tout en bas, après les `CREATE TABLE` :
-  ```sql
-  CREATE INDEX idx_road_segment_geom ON "RoadSegment" USING GIST (geom);
-  CREATE INDEX idx_incident_position ON "Incident" USING GIST (position);
-  CREATE INDEX idx_itinerary_point_depart ON "Itinerary" USING GIST ("pointDepart");
-  CREATE INDEX idx_itinerary_point_arrivee ON "Itinerary" USING GIST ("pointArrivee");
-  CREATE INDEX idx_itinerary_trace ON "Itinerary" USING GIST (trace);
-  ```
-
-**3. Appliquer la migration :**
-
-```bash
+# éditer le fichier de migration généré : ajouter `CREATE EXTENSION IF NOT EXISTS postgis;`
+# en haut, et les `CREATE INDEX ... USING GIST` en bas (cf. schema.prisma pour les colonnes concernées)
 npx prisma migrate dev
+npx prisma db seed
 ```
 
-Prisma détecte la migration en attente et l'applique — extension PostGIS, tables et index spatiaux
-sont créés en une seule commande.
-
----
-
-## ▶️ 4. Lancer le serveur de développement
+### Lancer le serveur
 
 ```bash
 npm run dev
 ```
 
-Le serveur démarre sur `http://localhost:3000`. Vérifie que tout est branché correctement :
+Le serveur démarre sur `http://localhost:3000`.
 
 ```bash
 curl http://localhost:3000/health
 ```
 
-Une réponse `{"status":true,"database":{"connected":true,"postgisVersion":"..."}}` confirme que Neon **et** PostGIS répondent correctement.
+Une réponse `{"status":true,"database":{"connected":true,"postgisVersion":"..."}}` confirme que
+Neon et PostGIS répondent correctement.
 
 ---
 
@@ -119,62 +104,43 @@ src/
     health/
       health.router.ts            GET /health — diagnostic Neon + PostGIS
     incidents/
-      incident.router.ts          GET/POST /incidents (exemple de référence)
+      incident.router.ts          GET/POST /incidents
       incident.service.ts         Pattern Prisma + raw SQL pour les colonnes géométriques
 prisma/
-  schema.prisma                  Modèle de données (cf. architecture technique §3)
-  migrations/
-    <timestamp>_init/
-      migration.sql               Migration éditée manuellement (extension PostGIS + index GiST)
-openapi.yaml                     Contrat d'API complet du MVP
-GIT_WORKFLOW.md                  Stratégie de branches, commits et versions
-CHANGELOG.md                     Historique des versions (Keep a Changelog)
+  schema.prisma                  Modèle de données
+  seed.ts                        Données de référence (rôles, types d'incident, axe de test)
+  migrations/                    Historique des migrations
+scripts/
+  setup-github.sh                Création des labels/milestones GitHub
+  test-r2.ts                     Diagnostic isolé de la connexion Cloudflare R2
+openapi.yaml
+GIT_WORKFLOW.md
+CHANGELOG.md
 ```
 
 ---
 
-## ⚠️ Point technique important : Prisma et PostGIS
+## ⚠️ Point technique : Prisma et PostGIS
 
 Prisma ne supporte pas nativement les colonnes géométriques (`geometry`). Elles sont déclarées en
 `Unsupported("geometry(...)")` dans `schema.prisma`, ce qui les rend **invisibles au client Prisma
 classique** (`prisma.incident.create()` ne peut pas les définir).
 
-Le module `incidents` (`incident.service.ts`) montre le pattern à réutiliser pour les prochains modules
-concernés par une colonne géométrique (itinéraires notamment) : passer par `prisma.$queryRaw` /
-`prisma.$executeRaw`, en combinaison avec les fonctions PostGIS (`ST_MakePoint`, `ST_SetSRID`, `ST_X`,
-`ST_Y`, `ST_Intersects`, `ST_ClosestPoint`...).
+Le module `incidents` (`incident.service.ts`) montre le pattern à réutiliser pour tout module
+concerné par une colonne géométrique (itinéraires notamment) : passer par `prisma.$queryRaw` /
+`prisma.$executeRaw`, combiné aux fonctions PostGIS (`ST_MakePoint`, `ST_SetSRID`, `ST_X`, `ST_Y`,
+`ST_Intersects`, `ST_ClosestPoint`...).
 
 ---
 
-## 🔜 Prochaines étapes de développement
+## 🌳 Contribuer
 
-Ce squelette couvre la fin de la Phase 0 du plan de développement (setup + contrat d'API amorcé via
-le module `incidents`). La suite logique, Phase 1, consiste à développer l'authentification (JWT +
-rôles hiérarchiques) et l'intégration OpenRouteService — cf. `plan_developpement_safewayroad_solo.docx`.
+La stratégie de branches, la convention de commits (Conventional Commits) et la correspondance
+versions/phases sont détaillées dans [`GIT_WORKFLOW.md`](./GIT_WORKFLOW.md).
 
 ---
 
-## 🌳 Git & GitHub
+## 📈 Suivi d'avancement
 
-La stratégie de branches, la convention de commits et la correspondance versions/phases sont détaillées
-dans [`GIT_WORKFLOW.md`](./GIT_WORKFLOW.md). Résumé rapide pour démarrer :
-
-```bash
-git init
-git add .
-git commit -m "chore: initialisation du projet (Phase 0)"
-
-# Créer le dépôt sur GitHub (via l'interface, ou gh CLI : gh repo create safewayroad-backend --private)
-git remote add origin <url-du-depot>
-git branch -M main
-git push -u origin main
-
-git tag -a v0.1.0 -m "Phase 0 — Cadrage"
-git push origin --tags
-
-git checkout -b develop
-git push -u origin develop
-```
-
-Puis, sur GitHub : configurer la protection de `main` et créer les labels/milestones — voir §6 de
-`GIT_WORKFLOW.md`, ou exécuter `scripts/setup-github.sh` (nécessite [GitHub CLI](https://cli.github.com)).
+L'état d'avancement du projet se suit via [`CHANGELOG.md`](./CHANGELOG.md) et les Milestones
+GitHub du dépôt — pas dans ce README, qui reste une vue d'ensemble stable du projet.
