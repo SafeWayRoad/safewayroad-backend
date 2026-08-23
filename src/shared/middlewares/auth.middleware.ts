@@ -2,20 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { RoleName } from "@prisma/client";
 import { verifyAccessToken } from "../utils/jwt";
 import { AppError } from "../utils/app-error";
-
-/**
- * Niveau hiérarchique par rôle (cf. architecture technique §4 et
- * Role.niveauHierarchique en base). Dupliqué ici en constante applicative pour
- * autoriser les routes sans requête DB supplémentaire à chaque appel ; à garder
- * synchronisé avec le seed Prisma si l'un des deux évolue.
- */
-const NIVEAU_HIERARCHIQUE: Record<RoleName, number> = {
-  PLATFORM_ADMIN: 100,
-  MINI_ADMIN: 80,
-  TEAM_LEAD: 60,
-  DRIVER: 40,
-  USER: 20,
-};
+import { getHierarchyLevel } from "../config/role-hierarchy";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -24,6 +11,7 @@ declare global {
       user?: {
         id: string;
         role: RoleName;
+        hierarchyLevel: number;
         companyId?: string | null;
         teamId?: string | null;
       };
@@ -37,7 +25,7 @@ function extractBearerToken(req: Request): string | null {
   return header.slice("Bearer ".length).trim();
 }
 
-/** Authentification obligatoire : bloque la requête si le token est absent/invalide. */
+/** Mandatory authentication: blocks the request if the token is missing/invalid. */
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
   const token = extractBearerToken(req);
   if (!token) {
@@ -49,6 +37,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
     req.user = {
       id: payload.sub,
       role: payload.role as RoleName,
+      hierarchyLevel: payload.hierarchyLevel,
       companyId: payload.companyId,
       teamId: payload.teamId,
     };
@@ -59,11 +48,15 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
 }
 
 /**
- * Authentification optionnelle : utile pour POST /incidents, où le signalement
- * reste possible sans compte, mais où reportedById doit être renseigné si
- * l'usager est connecté (cf. cahier des charges §4.3).
+ * Optional authentication: useful for POST /incidents, where reporting stays
+ * possible without an account, but reportedById should be filled in when the
+ * user is logged in (cf. cahier des charges §4.3).
  */
-export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction) {
+export function optionalAuthenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+) {
   const token = extractBearerToken(req);
   if (!token) return next();
 
@@ -72,32 +65,37 @@ export function optionalAuthenticate(req: Request, _res: Response, next: NextFun
     req.user = {
       id: payload.sub,
       role: payload.role as RoleName,
+      hierarchyLevel: payload.hierarchyLevel,
       companyId: payload.companyId,
       teamId: payload.teamId,
     };
   } catch {
-    // Token invalide en optionnel : on l'ignore plutôt que de bloquer la requête.
+    // Invalid token in optional mode: ignore it rather than blocking the request.
   }
   next();
 }
 
 /**
- * Autorise à partir d'un niveau hiérarchique minimum. Ex. requireMinRole("TEAM_LEAD")
- * laisse passer TEAM_LEAD, MINI_ADMIN et PLATFORM_ADMIN, mais bloque DRIVER/USER.
- * À utiliser après `authenticate`.
+ * Authorizes from a minimum hierarchy level upward. Ex. requireMinRole("TEAM_LEAD")
+ * lets TEAM_LEAD, MINI_ADMIN and PLATFORM_ADMIN through, but blocks DRIVER/USER.
+ * The comparison uses the hierarchyLevel embedded in the caller's JWT (set at
+ * login from Role.hierarchyLevel) against the target role's level, read from
+ * the in-memory cache warmed by loadRoleHierarchy() at startup — the database
+ * stays the single source of truth, no duplicated constant to keep in sync.
+ * Use after `authenticate`.
  */
 export function requireMinRole(minRole: RoleName) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(new AppError("Authentification requise", 401));
 
-    if (NIVEAU_HIERARCHIQUE[req.user.role] < NIVEAU_HIERARCHIQUE[minRole]) {
+    if (req.user.hierarchyLevel < getHierarchyLevel(minRole)) {
       return next(new AppError("Accès refusé : rôle insuffisant", 403));
     }
     next();
   };
 }
 
-/** Autorise uniquement une liste exacte de rôles (ex. réservé à l'administrateur plateforme). */
+/** Authorizes only an exact list of roles (ex. reserved to the platform administrator). */
 export function requireExactRole(...roles: RoleName[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) return next(new AppError("Authentification requise", 401));

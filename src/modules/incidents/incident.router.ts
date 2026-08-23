@@ -6,15 +6,18 @@ import { uploadIncidentPhoto } from "../../shared/utils/upload";
 import { AppError } from "../../shared/utils/app-error";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 const createIncidentSchema = z.object({
   roadSegmentId: z.string(),
   incidentTypeId: z.string(),
   latitude: z.coerce.number(),
   longitude: z.coerce.number(),
-  sensCirculation: z.enum(["OUTBOUND", "RETURN", "BOTH"]),
-  etatVoie: z.enum(["BLOCKED", "PARTIAL", "CLEAR"]),
+  direction: z.enum(["OUTBOUND", "RETURN", "BOTH"]),
+  roadStatus: z.enum(["BLOCKED", "PARTIAL", "CLEAR"]),
 });
 
 router.get("/incidents", async (_req, res, next) => {
@@ -26,13 +29,16 @@ router.get("/incidents", async (_req, res, next) => {
   }
 });
 
-// Signalement accessible sans compte (cf. cahier des charges §4.3) — l'auth,
-// quand présente, viendrait ici enrichir reportedById via un middleware optionnel.
+// Reporting accessible without an account (cf. cahier des charges §4.3) — auth,
+// when present, would enrich reportedById here via an optional middleware.
 router.post("/incidents", upload.single("photo"), async (req, res, next) => {
   try {
     const parsed = createIncidentSchema.safeParse(req.body);
     if (!parsed.success) {
-      throw new AppError(parsed.error.issues.map((i) => i.message).join(", "), 422);
+      throw new AppError(
+        parsed.error.issues.map((i) => i.message).join(", "),
+        422,
+      );
     }
 
     const photoUrl = req.file ? await uploadIncidentPhoto(req.file) : null;

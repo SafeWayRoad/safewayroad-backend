@@ -1,21 +1,18 @@
 import bcrypt from "bcryptjs";
-import { RoleName } from "@prisma/client";
+import { Prisma, RoleName } from "@prisma/client";
 import { prisma } from "../../shared/config/database";
 import { AppError } from "../../shared/utils/app-error";
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../shared/utils/jwt";
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+} from "../../shared/utils/jwt";
 
 const SALT_ROUNDS = 10;
 
-type UserWithRole = {
-  id: string;
-  phone: string | null;
-  email: string | null;
-  accountStatus: string;
-  actif: boolean;
-  companyId: string | null;
-  teamId: string | null;
-  role: { name: RoleName };
-};
+// Derived directly from the Prisma schema — no hand-duplicated shadow type,
+// so this stays correct automatically if the User/Role models evolve.
+type UserWithRole = Prisma.UserGetPayload<{ include: { role: true } }>;
 
 export interface AuthResult {
   accessToken: string;
@@ -28,7 +25,7 @@ export interface AuthResult {
     role: RoleName;
     companyId: string | null;
     teamId: string | null;
-    actif: boolean;
+    isActive: boolean;
   };
 }
 
@@ -36,6 +33,7 @@ function buildAuthResult(user: UserWithRole): AuthResult {
   const accessToken = signAccessToken({
     sub: user.id,
     role: user.role.name,
+    hierarchyLevel: user.role.hierarchyLevel,
     companyId: user.companyId,
     teamId: user.teamId,
   });
@@ -52,7 +50,7 @@ function buildAuthResult(user: UserWithRole): AuthResult {
       role: user.role.name,
       companyId: user.companyId,
       teamId: user.teamId,
-      actif: user.actif,
+      isActive: user.isActive,
     },
   };
 }
@@ -64,10 +62,10 @@ export interface RegisterInput {
 }
 
 /**
- * Inscription d'un usager individuel (compte gratuit par défaut, rôle USER).
- * Au moins un identifiant (téléphone OU email) est requis — la validation de
- * format/présence est faite en amont dans auth.router.ts (Zod), ici on ne
- * revérifie que la contrainte métier "au moins un des deux".
+ * Individual user sign-up (free account by default, USER role).
+ * At least one identifier (phone OR email) is required — presence/format
+ * validation happens upstream in auth.router.ts (Zod); here we only re-check
+ * the business rule "at least one of the two".
  */
 export async function registerUser(input: RegisterInput): Promise<AuthResult> {
   if (!input.phone && !input.email) {
@@ -88,8 +86,11 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
 
   const role = await prisma.role.findUnique({ where: { name: "USER" } });
   if (!role) {
-    // Le rôle USER doit être seedé (prisma/seed.ts) avant toute inscription.
-    throw new AppError("Configuration serveur incomplète (rôle USER manquant)", 500);
+    // The USER role must be seeded (prisma/seed.ts) before any sign-up.
+    throw new AppError(
+      "Configuration serveur incomplète (rôle USER manquant)",
+      500,
+    );
   }
 
   const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
@@ -108,7 +109,7 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
 }
 
 export interface LoginInput {
-  /** Peut être un numéro de téléphone ou un email — recherché dans les deux colonnes. */
+  /** Can be a phone number or an email — looked up in both columns. */
   identifier: string;
   password: string;
 }
@@ -121,9 +122,9 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
     include: { role: true },
   });
 
-  // Message volontairement identique (identifiant inconnu / mot de passe faux /
-  // compte désactivé) pour ne pas révéler si un identifiant existe.
-  if (!user || !user.actif) {
+  // Deliberately identical message (unknown identifier / wrong password /
+  // disabled account) so as not to reveal whether an identifier exists.
+  if (!user || !user.isActive) {
     throw new AppError("Identifiants invalides", 401);
   }
 
@@ -135,7 +136,9 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
   return buildAuthResult(user);
 }
 
-export async function refreshAccessToken(refreshToken: string): Promise<AuthResult> {
+export async function refreshAccessToken(
+  refreshToken: string,
+): Promise<AuthResult> {
   let payload;
   try {
     payload = verifyRefreshToken(refreshToken);
@@ -148,7 +151,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<AuthResu
     include: { role: true },
   });
 
-  if (!user || !user.actif) {
+  if (!user || !user.isActive) {
     throw new AppError("Compte introuvable ou désactivé", 401);
   }
 

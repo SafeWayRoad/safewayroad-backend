@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SafeWayRoad API
-  version: 0.1.0
+  version: 0.2.0
   description: >
     Contrat d'API du MVP SafeWayRoad — signalement d'incidents et planification
     de trajet sur les Routes Nationales du Cameroun. Ce document sert de mémo
@@ -191,9 +191,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nom, miniAdminPhoneOrEmail]
+              required: [name, miniAdminPhoneOrEmail]
               properties:
-                nom: { type: string }
+                name: { type: string }
                 miniAdminPhoneOrEmail: { type: string }
       responses:
         "201":
@@ -231,10 +231,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nom, chefEquipePhoneOrEmail]
+              required: [name, teamLeadPhoneOrEmail]
               properties:
-                nom: { type: string }
-                chefEquipePhoneOrEmail: { type: string }
+                name: { type: string }
+                teamLeadPhoneOrEmail: { type: string }
       responses:
         "201":
           description: Équipe créée
@@ -287,7 +287,7 @@ paths:
             schema:
               type: object
               properties:
-                actif: { type: boolean }
+                isActive: { type: boolean }
       responses:
         "200":
           description: Compte mis à jour
@@ -325,16 +325,23 @@ paths:
             schema:
               type: object
               required:
-                [roadSegmentId, incidentTypeId, latitude, longitude, sensCirculation, etatVoie]
+                [
+                  roadSegmentId,
+                  incidentTypeId,
+                  latitude,
+                  longitude,
+                  direction,
+                  roadStatus,
+                ]
               properties:
                 roadSegmentId: { type: string }
                 incidentTypeId: { type: string }
                 latitude: { type: number }
                 longitude: { type: number }
-                sensCirculation:
-                  $ref: "#/components/schemas/SensCirculation"
-                etatVoie:
-                  $ref: "#/components/schemas/EtatVoie"
+                direction:
+                  $ref: "#/components/schemas/Direction"
+                roadStatus:
+                  $ref: "#/components/schemas/RoadStatus"
                 photo:
                   type: string
                   format: binary
@@ -388,11 +395,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [depart, arrivee]
+              required: [origin, destination]
               properties:
-                depart:
+                origin:
                   $ref: "#/components/schemas/LatLng"
-                arrivee:
+                destination:
                   $ref: "#/components/schemas/LatLng"
       responses:
         "201":
@@ -453,8 +460,8 @@ paths:
             schema:
               type: object
               properties:
-                statut:
-                  $ref: "#/components/schemas/StatutTrip"
+                status:
+                  $ref: "#/components/schemas/TripStatus"
       responses:
         "200":
           description: Trajet mis à jour
@@ -515,31 +522,31 @@ components:
           $ref: "#/components/schemas/RoleName"
         companyId: { type: string, nullable: true }
         teamId: { type: string, nullable: true }
-        actif: { type: boolean }
+        isActive: { type: boolean }
 
     Company:
       type: object
       properties:
         id: { type: string }
-        nom: { type: string }
+        name: { type: string }
         miniAdminId: { type: string }
-        piloteDebut: { type: string, format: date, nullable: true }
-        piloteFin: { type: string, format: date, nullable: true }
+        pilotStartDate: { type: string, format: date, nullable: true }
+        pilotEndDate: { type: string, format: date, nullable: true }
 
     Team:
       type: object
       properties:
         id: { type: string }
-        nom: { type: string }
+        name: { type: string }
         companyId: { type: string }
 
     CompanyStats:
       type: object
       properties:
-        chauffeursActifs: { type: integer }
-        trajetsCeMois: { type: integer }
-        signalements: { type: integer }
-        incidentsEnCours: { type: integer }
+        activeDrivers: { type: integer }
+        tripsThisMonth: { type: integer }
+        reports: { type: integer }
+        ongoingIncidents: { type: integer }
 
     LatLng:
       type: object
@@ -548,15 +555,15 @@ components:
         latitude: { type: number }
         longitude: { type: number }
 
-    SensCirculation:
+    Direction:
       type: string
       enum: [OUTBOUND, RETURN, BOTH]
 
-    EtatVoie:
+    RoadStatus:
       type: string
       enum: [BLOCKED, PARTIAL, CLEAR]
 
-    StatutIncident:
+    IncidentStatus:
       type: string
       enum: [ACTIVE, RESOLVED]
 
@@ -572,31 +579,31 @@ components:
         incidentTypeId: { type: string }
         latitude: { type: number }
         longitude: { type: number }
-        sensCirculation:
-          $ref: "#/components/schemas/SensCirculation"
-        etatVoie:
-          $ref: "#/components/schemas/EtatVoie"
+        direction:
+          $ref: "#/components/schemas/Direction"
+        roadStatus:
+          $ref: "#/components/schemas/RoadStatus"
         photoUrl: { type: string, nullable: true }
-        statut:
-          $ref: "#/components/schemas/StatutIncident"
-        signaleLe: { type: string, format: date-time }
-        derniereConfirmation: { type: string, format: date-time }
+        status:
+          $ref: "#/components/schemas/IncidentStatus"
+        reportedAt: { type: string, format: date-time }
+        lastConfirmedAt: { type: string, format: date-time }
 
     Itinerary:
       type: object
       properties:
         id: { type: string }
-        pointDepart:
+        origin:
           $ref: "#/components/schemas/LatLng"
-        pointArrivee:
+        destination:
           $ref: "#/components/schemas/LatLng"
-        favori: { type: boolean }
-        incidentsSurTrajet:
+        isFavorite: { type: boolean }
+        incidentsOnRoute:
           type: array
           items:
             $ref: "#/components/schemas/Incident"
 
-    StatutTrip:
+    TripStatus:
       type: string
       enum: [IN_PROGRESS, COMPLETED, ABANDONED]
 
@@ -605,7 +612,7 @@ components:
       properties:
         id: { type: string }
         itineraryId: { type: string }
-        statut:
-          $ref: "#/components/schemas/StatutTrip"
-        demarreLe: { type: string, format: date-time }
-        termineLe: { type: string, format: date-time, nullable: true }
+        status:
+          $ref: "#/components/schemas/TripStatus"
+        startedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time, nullable: true }

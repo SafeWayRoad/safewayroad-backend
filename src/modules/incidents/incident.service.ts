@@ -2,10 +2,11 @@ import { randomUUID } from "crypto";
 import { prisma } from "../../shared/config/database";
 
 /**
- * Exemple de référence pour la suite du développement : les colonnes géométriques
- * (Unsupported dans le schema Prisma) sont invisibles au client Prisma classique.
- * On les insère/lit donc via $executeRaw / $queryRaw, en combinaison avec les
- * fonctions PostGIS (ST_MakePoint, ST_SetSRID, ST_AsGeoJSON, ST_Distance...).
+ * Reference example for the rest of development: geometry columns
+ * (Unsupported in the Prisma schema) are invisible to the regular Prisma
+ * client. They are therefore inserted/read via $executeRaw / $queryRaw,
+ * combined with PostGIS functions (ST_MakePoint, ST_SetSRID, ST_AsGeoJSON,
+ * ST_Distance...).
  */
 
 export interface CreateIncidentInput {
@@ -14,8 +15,8 @@ export interface CreateIncidentInput {
   reportedById?: string | null;
   latitude: number;
   longitude: number;
-  sensCirculation: "OUTBOUND" | "RETURN" | "BOTH";
-  etatVoie: "BLOCKED" | "PARTIAL" | "CLEAR";
+  direction: "OUTBOUND" | "RETURN" | "BOTH";
+  roadStatus: "BLOCKED" | "PARTIAL" | "CLEAR";
   photoUrl?: string | null;
 }
 
@@ -25,16 +26,16 @@ export async function createIncident(input: CreateIncidentInput) {
   await prisma.$executeRaw`
     INSERT INTO "Incident" (
       id, "roadSegmentId", "incidentTypeId", "reportedById",
-      position, "sensCirculation", "etatVoie", "photoUrl",
-      statut, "signaleLe", "derniereConfirmation"
+      position, direction, "roadStatus", "photoUrl",
+      status, "reportedAt", "lastConfirmedAt"
     )
     VALUES (
       ${id}, ${input.roadSegmentId}, ${input.incidentTypeId}, ${input.reportedById ?? null},
       ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326),
-      ${input.sensCirculation}::"SensCirculation",
-      ${input.etatVoie}::"EtatVoie",
+      ${input.direction}::"Direction",
+      ${input.roadStatus}::"RoadStatus",
       ${input.photoUrl ?? null},
-      'ACTIVE'::"StatutIncident", now(), now()
+      'ACTIVE'::"IncidentStatus", now(), now()
     );
   `;
 
@@ -47,8 +48,8 @@ export async function getIncidentById(id: string) {
       id, "roadSegmentId", "incidentTypeId", "reportedById",
       ST_Y(position) AS latitude,
       ST_X(position) AS longitude,
-      "sensCirculation", "etatVoie", "photoUrl",
-      statut, "signaleLe", "derniereConfirmation"
+      direction, "roadStatus", "photoUrl",
+      status, "reportedAt", "lastConfirmedAt"
     FROM "Incident"
     WHERE id = ${id};
   `;
@@ -61,10 +62,10 @@ export async function listActiveIncidents() {
       id, "roadSegmentId", "incidentTypeId",
       ST_Y(position) AS latitude,
       ST_X(position) AS longitude,
-      "sensCirculation", "etatVoie", "photoUrl",
-      statut, "signaleLe", "derniereConfirmation"
+      direction, "roadStatus", "photoUrl",
+      status, "reportedAt", "lastConfirmedAt"
     FROM "Incident"
-    WHERE statut = 'ACTIVE'::"StatutIncident"
-    ORDER BY "signaleLe" DESC;
+    WHERE status = 'ACTIVE'::"IncidentStatus"
+    ORDER BY "reportedAt" DESC;
   `;
 }

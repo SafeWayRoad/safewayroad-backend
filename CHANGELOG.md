@@ -9,6 +9,12 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+_Rien pour l'instant — prochaine section à alimenter au fil de la Phase 2._
+
+---
+
+## [0.2.0] — 2026-08-23 — Phase 1 — Fondations techniques
+
 ### ⚠️ Cassant (breaking change)
 - **Séparation `phoneOrEmail` en deux colonnes distinctes `phone` et `email`** sur `User`. Au moins l'un des deux est requis — validé **uniquement côté application** (Zod dans `auth.router.ts` / `user.router.ts`), pas de contrainte `CHECK` en base (choix délibéré pour rester sur un workflow 100 % piloté par `prisma migrate dev`, sans édition manuelle de SQL). Impact API :
   - `POST /auth/register` : accepte désormais `phone`/`email` (au moins un requis) au lieu de `phoneOrEmail`.
@@ -24,20 +30,32 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
   - `StatutIncident` : `ACTIF`→`ACTIVE`, `RESOLU`→`RESOLVED`
   - `ConfirmationType` : `TOUJOURS_LA`→`STILL_THERE`, `DEGAGE`→`CLEARED`
   - `StatutTrip` : `EN_COURS`→`IN_PROGRESS`, `TERMINE`→`COMPLETED`, `ABANDONNE`→`ABANDONED`
-- **Migration générée via `prisma migrate dev`** (pas de SQL écrit à la main, conformément au workflow du projet) : lors de la génération, Prisma détecte les renommages (colonne et valeurs d'enum) et demande une confirmation interactive en CLI pour chaque renommage — répondre "oui" à ces prompts est indispensable pour préserver les données déjà en base plutôt que de les perdre via un DROP + CREATE.
+- **Migration générée via `prisma migrate dev`** (pas de SQL écrit à la main, conformément au workflow du projet) : Prisma a détecté les renommages (colonne et valeurs d'enum) via ses prompts interactifs en CLI, confirmés un par un pour préserver les données déjà en base plutôt que de les perdre via un DROP + CREATE.
+- **Anglicisation complète du schéma** (deuxième migration de la phase, avant tag) : tous les noms de champs et de types d'enum encore en français sont passés en anglais — `Role.niveauHierarchique`→`hierarchyLevel`, `Company.nom`→`name`, `Company.piloteDebut/Fin`→`pilotStartDate`/`pilotEndDate`, `Company.creeLe`→`createdAt`, `Team.nom`→`name`, `Team.creeLe`→`createdAt`, `User.actif`→`isActive`, `RouteAxis.numero`→`code`, `RouteAxis.nomCourant`→`commonName`, `RoadSegment.pkDebut/Fin`→`pkStart`/`pkEnd`, `IncidentType.libelle`→`label`, `Incident.sensCirculation`→`direction`, `Incident.etatVoie`→`roadStatus`, `Incident.statut`→`status`, `Incident.signaleLe`→`reportedAt`, `Incident.derniereConfirmation`→`lastConfirmedAt`, `Confirmation.horodatage`→`confirmedAt`, `Itinerary.favori`→`isFavorite`, `Itinerary.creeLe`→`createdAt`, `Itinerary.pointDepart/Arrivee`→`startPoint`/`endPoint`, `Itinerary.trace`→`path`, `Trip.statut`→`status`, `Trip.demarreLe`→`startedAt`, `Trip.termineLe`→`endedAt`. Noms d'enum renommés : `IncidentTypeLibelle`→`IncidentTypeLabel`, `SensCirculation`→`Direction`, `EtatVoie`→`RoadStatus`, `StatutIncident`→`IncidentStatus`, `StatutTrip`→`TripStatus`. Impact API : `POST /incidents` attend désormais `direction`/`roadStatus` au lieu de `sensCirculation`/`etatVoie`.
 
-> Note de convention : les noms de champs déjà en français (`nom`, `niveauHierarchique`, `signaleLe`, etc.) sont **volontairement conservés en l'état** pour cette itération — seules les valeurs d'énumération ("informations fixes et critiques" au sens strict, ex. les rôles) ont été traduites. Une traduction complète des noms de champs pourra faire l'objet d'un chantier ultérieur si souhaité.
+> Note de convention (mise à jour) : après cette seconde passe, l'ensemble du vocabulaire du schéma (modèles, champs, enums) est en anglais. Seul le **contenu** effectivement saisi par les usagers (nom d'une entreprise, texte libre d'un signalement...) reste libre, en français comme dans toute autre langue — cohérent avec le futur frontend prévu par défaut en anglais avec bascule français (hors périmètre pour l'instant).
 
-### Ajouté (Phase 1)
+### Ajouté
 - Authentification JWT (access token + refresh token) : `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`
-- Middleware d'autorisation par rôle hiérarchique (`authenticate`, `requireMinRole`, `requireExactRole`)
+- Middleware d'autorisation par rôle hiérarchique (`authenticate`, `optionalAuthenticate`, `requireMinRole`, `requireExactRole`)
 - Profil utilisateur connecté : `GET /users/me`, `PATCH /users/me`
 - Intégration OpenRouteService encapsulée derrière l'interface `RoutingProvider`, avec script de diagnostic isolé `npm run test:ors`
 - Variable d'environnement `JWT_REFRESH_EXPIRES_IN`
+- Nouveau `prisma/seed.ts` réécrit avec les enums anglais (rôles, axes routiers N1/N3/N4, tronçon de test N3, types d'incident) — l'ancien seed était obsolète après le reset de la base consécutif à la migration phone/email + enums anglais
+- `src/shared/config/role-hierarchy.ts` : cache mémoire de `Role.hierarchyLevel`, chargé une fois au démarrage du serveur et embarqué dans le JWT à la connexion — supprime la constante `NIVEAU_HIERARCHIQUE` dupliquée à la main dans `auth.middleware.ts`, sans requête DB supplémentaire par appel
+
+### Corrigé
+- `database.ts` : le tableau de config `log` est désormais typé `as const`, ce qui permet à `$on("error"|"warn", ...)` d'être correctement typé — suppression du `(client as any).$on(...)` qui contournait le typage
+- `auth.service.ts` : le type `UserWithRole` est désormais dérivé de `Prisma.UserGetPayload<{ include: { role: true } }>` au lieu d'être recopié à la main — reste automatiquement juste si le schéma évolue
+- Retrait de `@types/bcryptjs` des devDependencies (`bcryptjs@3.x` embarque désormais ses propres types ; le paquet `@types/bcryptjs` était devenu redondant)
+- Contrôle de typage (`tsc --noEmit`, mode strict) revalidé après l'ensemble de ces changements — aucune erreur
 
 ### Validé
-- Authentification testée de bout en bout dans Postman (`register` → `login` → `users/me`)
+- Authentification testée de bout en bout dans Postman (`register` → `login` → `users/me`) — premier passage le 23/08/2026 avec l'ancien champ `phoneOrEmail`
 - Test d'intégration OpenRouteService validé en conditions réelles (axe Douala → Yaoundé : 236,1 km, ~179 min, 2238 points de tracé)
+- **Re-test Postman complet effectué avec succès après la migration phone/email + enums anglais (23/08/2026)** : `register` (téléphone et email), `login` via `identifier`, `GET`/`PATCH /users/me`, `refresh`, cas d'erreur (mot de passe erroné → 401, identifiant déjà utilisé → 409, champs manquants → 422, sans token → 401), `POST`/`GET /incidents` avec les enums anglais (`OUTBOUND`, `BLOCKED`...)
+- Script `test-ors.ts` rejoué avec succès après le reset de base
+- Contrôle de typage (`tsc --noEmit`, mode strict) validé sur l'ensemble du code source de la Phase 1 — aucune erreur
 
 ---
 

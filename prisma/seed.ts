@@ -7,83 +7,80 @@ const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
 // -----------------------------------------------------------------------------
-// ⚠️ IMPORTANT : ces valeurs doivent rester strictement synchronisées avec la
-// constante NIVEAU_HIERARCHIQUE dans src/shared/middlewares/auth.middleware.ts
-// (cf. rapport Phase 1 §3.3 — point de vigilance déjà identifié).
-// Vérifie/ajuste ces chiffres avant de lancer le seed si le middleware utilise
-// d'autres valeurs.
+// These values come from Role.hierarchyLevel — the single source of truth
+// (cf. src/shared/config/role-hierarchy.ts, loaded at server startup).
 // -----------------------------------------------------------------------------
 const ROLES: {
   name: "PLATFORM_ADMIN" | "MINI_ADMIN" | "TEAM_LEAD" | "DRIVER" | "USER";
-  niveauHierarchique: number;
+  hierarchyLevel: number;
 }[] = [
-  { name: "PLATFORM_ADMIN", niveauHierarchique: 100 },
-  { name: "MINI_ADMIN", niveauHierarchique: 80 },
-  { name: "TEAM_LEAD", niveauHierarchique: 60 },
-  { name: "DRIVER", niveauHierarchique: 20 },
-  { name: "USER", niveauHierarchique: 20 },
+  { name: "PLATFORM_ADMIN", hierarchyLevel: 100 },
+  { name: "MINI_ADMIN", hierarchyLevel: 80 },
+  { name: "TEAM_LEAD", hierarchyLevel: 60 },
+  { name: "DRIVER", hierarchyLevel: 40 },
+  { name: "USER", hierarchyLevel: 20 },
 ];
 
 const ROUTE_AXES = [
-  { numero: "N1", nomCourant: "Yaoundé — Garoua — Kousséri" },
-  { numero: "N3", nomCourant: "Douala — Yaoundé" },
-  { numero: "N4", nomCourant: "Yaoundé — Bafoussam" },
+  { code: "N1", commonName: "Yaoundé — Garoua — Kousséri" },
+  { code: "N3", commonName: "Douala — Yaoundé" },
+  { code: "N4", commonName: "Yaoundé — Bafoussam" },
 ];
 
 const INCIDENT_TYPES: {
-  libelle:
+  label:
     | "ACCIDENT"
     | "BREAKDOWN"
     | "OBSTACLE"
     | "INSECURITY"
     | "MEDICAL_EMERGENCY";
 }[] = [
-  { libelle: "ACCIDENT" },
-  { libelle: "BREAKDOWN" },
-  { libelle: "OBSTACLE" },
-  { libelle: "INSECURITY" },
-  { libelle: "MEDICAL_EMERGENCY" },
+  { label: "ACCIDENT" },
+  { label: "BREAKDOWN" },
+  { label: "OBSTACLE" },
+  { label: "INSECURITY" },
+  { label: "MEDICAL_EMERGENCY" },
 ];
 
 async function main() {
   console.log("🌱 Seed — SafeWayRoad");
 
-  // --- Rôles ---------------------------------------------------------------
-  console.log("→ Rôles...");
+  // --- Roles -----------------------------------------------------------------
+  console.log("→ Roles...");
   for (const role of ROLES) {
     await prisma.role.upsert({
       where: { name: role.name },
-      update: { niveauHierarchique: role.niveauHierarchique },
+      update: { hierarchyLevel: role.hierarchyLevel },
       create: role,
     });
   }
 
-  // --- Types d'incident ------------------------------------------------------
-  console.log("→ Types d'incident...");
+  // --- Incident types ----------------------------------------------------------
+  console.log("→ Incident types...");
   for (const type of INCIDENT_TYPES) {
     await prisma.incidentType.upsert({
-      where: { libelle: type.libelle },
+      where: { label: type.label },
       update: {},
       create: type,
     });
   }
 
-  // --- Axes routiers (RouteAxis) ---------------------------------------------
-  console.log("→ Axes routiers (N1/N3/N4)...");
+  // --- Route axes (RouteAxis) ---------------------------------------------------
+  console.log("→ Route axes (N1/N3/N4)...");
   const axisIds: Record<string, string> = {};
   for (const axis of ROUTE_AXES) {
     const created = await prisma.routeAxis.upsert({
-      where: { numero: axis.numero },
-      update: { nomCourant: axis.nomCourant },
+      where: { code: axis.code },
+      update: { commonName: axis.commonName },
       create: axis,
     });
-    axisIds[axis.numero] = created.id;
+    axisIds[axis.code] = created.id;
   }
 
-  // --- Tronçon de test sur la N3 (Douala → Yaoundé) --------------------------
-  // Colonne géométrique PostGIS ("Unsupported" pour Prisma) : insertion en raw SQL,
-  // même pattern que incident.service.ts (ST_GeomFromText + $executeRaw).
-  console.log("→ Tronçon de test (N3, PostGIS)...");
+  // --- Test segment on N3 (Douala → Yaoundé) --------------------------------------
+  // PostGIS geometry column ("Unsupported" for Prisma): raw SQL insertion,
+  // same pattern as incident.service.ts (ST_GeomFromText + $executeRaw).
+  console.log("→ Test segment (N3, PostGIS)...");
   const existingSegment = await prisma.$queryRaw<{ id: string }[]>`
     SELECT id FROM "RoadSegment" WHERE "routeAxisId" = ${axisIds["N3"]} LIMIT 1;
   `;
@@ -91,11 +88,11 @@ async function main() {
   let roadSegmentId: string;
   if (existingSegment.length > 0) {
     roadSegmentId = existingSegment[0].id;
-    console.log("  (tronçon déjà présent, réutilisé)");
+    console.log("  (segment already present, reused)");
   } else {
     roadSegmentId = randomUUID();
     await prisma.$executeRaw`
-      INSERT INTO "RoadSegment" (id, "pkDebut", "pkFin", geom, "routeAxisId")
+      INSERT INTO "RoadSegment" (id, "pkStart", "pkEnd", geom, "routeAxisId")
       VALUES (
         ${roadSegmentId},
         0,
@@ -106,18 +103,18 @@ async function main() {
     `;
   }
 
-  console.log("✅ Seed terminé.");
-  console.log(`   Roles : ${ROLES.map((r) => r.name).join(", ")}`);
-  console.log(`   Axes  : ${ROUTE_AXES.map((a) => a.numero).join(", ")}`);
-  console.log(`   Tronçon de test (N3) : ${roadSegmentId}`);
+  console.log("✅ Seed complete.");
+  console.log(`   Roles         : ${ROLES.map((r) => r.name).join(", ")}`);
+  console.log(`   Axes          : ${ROUTE_AXES.map((a) => a.code).join(", ")}`);
+  console.log(`   Test segment (N3): ${roadSegmentId}`);
   console.log(
-    `   Types d'incident : ${INCIDENT_TYPES.map((t) => t.libelle).join(", ")}`,
+    `   Incident types: ${INCIDENT_TYPES.map((t) => t.label).join(", ")}`,
   );
 }
 
 main()
   .catch((err) => {
-    console.error("❌ Échec du seed :", err);
+    console.error("❌ Seed failed:", err);
     process.exit(1);
   })
   .finally(async () => {

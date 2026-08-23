@@ -6,7 +6,7 @@ function toProfileDto(user: {
   phone: string | null;
   email: string | null;
   accountStatus: string;
-  actif: boolean;
+  isActive: boolean;
   companyId: string | null;
   teamId: string | null;
   role: { name: string };
@@ -19,7 +19,7 @@ function toProfileDto(user: {
     role: user.role.name,
     companyId: user.companyId,
     teamId: user.teamId,
-    actif: user.actif,
+    isActive: user.isActive,
   };
 }
 
@@ -38,15 +38,25 @@ export interface UpdateProfileInput {
   email?: string;
 }
 
-export async function updateUserProfile(userId: string, input: UpdateProfileInput) {
+export async function updateUserProfile(
+  userId: string,
+  input: UpdateProfileInput,
+) {
   if (input.phone) {
-    const existing = await prisma.user.findUnique({ where: { phone: input.phone } });
+    const existing = await prisma.user.findUnique({
+      where: { phone: input.phone },
+    });
     if (existing && existing.id !== userId) {
-      throw new AppError("Ce numéro de téléphone est déjà utilisé par un autre compte", 409);
+      throw new AppError(
+        "Ce numéro de téléphone est déjà utilisé par un autre compte",
+        409,
+      );
     }
   }
   if (input.email) {
-    const existing = await prisma.user.findUnique({ where: { email: input.email } });
+    const existing = await prisma.user.findUnique({
+      where: { email: input.email },
+    });
     if (existing && existing.id !== userId) {
       throw new AppError("Cet email est déjà utilisé par un autre compte", 409);
     }

@@ -8,7 +8,7 @@ export interface LatLng {
 
 export interface RouteGeometry {
   type: "LineString";
-  coordinates: [number, number][]; // [longitude, latitude], convention GeoJSON
+  coordinates: [number, number][]; // [longitude, latitude], GeoJSON convention
 }
 
 export interface RouteResult {
@@ -18,38 +18,44 @@ export interface RouteResult {
 }
 
 /**
- * Interface interne isolant le moteur de calcul d'itinéraire (cf. architecture
- * technique §6). Le reste de l'application dépend de cette interface, jamais
- * directement d'OpenRouteService — ce qui permettra une migration vers une
- * solution auto-hébergée (GraphHopper/OSRM) en V2/V3 sans réécriture.
+ * Internal interface isolating the route-calculation engine (cf. architecture
+ * technique §6). The rest of the application depends on this interface,
+ * never directly on OpenRouteService — allowing a future migration to a
+ * self-hosted solution (GraphHopper/OSRM) in V2/V3 without a rewrite.
  */
 export interface RoutingProvider {
-  getRoute(depart: LatLng, arrivee: LatLng): Promise<RouteResult>;
+  getRoute(origin: LatLng, destination: LatLng): Promise<RouteResult>;
 }
 
 export class OpenRouteServiceProvider implements RoutingProvider {
-  async getRoute(depart: LatLng, arrivee: LatLng): Promise<RouteResult> {
+  async getRoute(origin: LatLng, destination: LatLng): Promise<RouteResult> {
     if (!env.ORS_API_KEY) {
       throw new AppError("ORS_API_KEY n'est pas configuré", 500);
     }
 
-    const response = await fetch(`${env.ORS_BASE_URL}/v2/directions/driving-car/geojson`, {
-      method: "POST",
-      headers: {
-        Authorization: env.ORS_API_KEY,
-        "Content-Type": "application/json",
+    const response = await fetch(
+      `${env.ORS_BASE_URL}/v2/directions/driving-car/geojson`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: env.ORS_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          coordinates: [
+            [origin.longitude, origin.latitude],
+            [destination.longitude, destination.latitude],
+          ],
+        }),
       },
-      body: JSON.stringify({
-        coordinates: [
-          [depart.longitude, depart.latitude],
-          [arrivee.longitude, arrivee.latitude],
-        ],
-      }),
-    });
+    );
 
     if (!response.ok) {
       const body = await response.text();
-      throw new AppError(`Erreur OpenRouteService (${response.status}) : ${body}`, 502);
+      throw new AppError(
+        `Erreur OpenRouteService (${response.status}) : ${body}`,
+        502,
+      );
     }
 
     const data = (await response.json()) as {
@@ -61,7 +67,10 @@ export class OpenRouteServiceProvider implements RoutingProvider {
 
     const feature = data.features?.[0];
     if (!feature) {
-      throw new AppError("Réponse OpenRouteService inexploitable (aucun tracé)", 502);
+      throw new AppError(
+        "Réponse OpenRouteService inexploitable (aucun tracé)",
+        502,
+      );
     }
 
     return {
@@ -72,5 +81,5 @@ export class OpenRouteServiceProvider implements RoutingProvider {
   }
 }
 
-// Instance par défaut utilisée par le reste de l'app (cf. modules/itineraries à venir en Phase 2).
+// Default instance used by the rest of the app (cf. modules/itineraries, Phase 2).
 export const routingProvider: RoutingProvider = new OpenRouteServiceProvider();

@@ -7,51 +7,51 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Rôles, comptes entreprise et utilisateurs (cf. cahier des charges §3.2)
+// Roles, company accounts and users (cf. cahier des charges §3.2)
 //
-// Note : les valeurs d'énumération ci-dessous sont volontairement en anglais
-// (informations "fixes et critiques" manipulées directement par le code),
-// même si la documentation produit et les commentaires restent en français.
+// Naming convention: all identifiers (models, fields, enums) are in English.
+// User-submitted content (e.g. company names, incident photos) may of course
+// remain in French — only the schema's own vocabulary is English.
 // ---------------------------------------------------------------------------
 
 enum RoleName {
-  PLATFORM_ADMIN 
+  PLATFORM_ADMIN
   MINI_ADMIN
-  TEAM_LEAD 
-  DRIVER 
-  USER 
+  TEAM_LEAD
+  DRIVER
+  USER
 }
 
 enum AccountStatus {
-  FREE 
+  FREE
   PREMIUM
-  ENTERPRISE 
+  ENTERPRISE
 }
 
 model Role {
-  id                 String   @id @default(cuid())
-  name               RoleName @unique
-  niveauHierarchique Int
+  id             String   @id @default(cuid())
+  name           RoleName @unique
+  hierarchyLevel Int
 
   users User[]
 }
 
 model Company {
-  id          String    @id @default(cuid())
-  nom         String
-  miniAdminId String?   @unique
-  piloteDebut DateTime?
-  piloteFin   DateTime?
-  creeLe      DateTime  @default(now())
+  id             String    @id @default(cuid())
+  name           String
+  miniAdminId    String?   @unique
+  pilotStartDate DateTime?
+  pilotEndDate   DateTime?
+  createdAt      DateTime  @default(now())
 
   teams Team[]
   users User[]
 }
 
 model Team {
-  id     String   @id @default(cuid())
-  nom    String
-  creeLe DateTime @default(now())
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -60,13 +60,13 @@ model Team {
 }
 
 model User {
-  id             String        @id @default(cuid())
-  phone          String?       @unique
-  email          String?       @unique
-  passwordHash   String
-  accountStatus  AccountStatus @default(FREE)
-  actif          Boolean       @default(true)
-  createdAt      DateTime      @default(now())
+  id            String        @id @default(cuid())
+  phone         String?       @unique
+  email         String?       @unique
+  passwordHash  String
+  accountStatus AccountStatus @default(FREE)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
 
   roleId String
   role   Role   @relation(fields: [roleId], references: [id])
@@ -77,7 +77,7 @@ model User {
   teamId String?
   team   Team?   @relation(fields: [teamId], references: [id])
 
-  incidentsSignales Incident[]      @relation("IncidentReportedBy")
+  reportedIncidents Incident[]      @relation("IncidentReportedBy")
   confirmations     Confirmation[]
   itineraries       Itinerary[]
   trips             Trip[]
@@ -87,81 +87,81 @@ model User {
 }
 
 // ---------------------------------------------------------------------------
-// Réseau routier (Routes Nationales et tronçons — cf. architecture technique §3)
+// Road network (Routes Nationales and segments — cf. architecture technique §3)
 // ---------------------------------------------------------------------------
 
 model RouteAxis {
   id         String  @id @default(cuid())
-  numero     String  @unique // ex. "N1", "N3", "N4"
-  nomCourant String?
+  code       String  @unique // e.g. "N1", "N3", "N4"
+  commonName String?
 
   segments RoadSegment[]
 }
 
 model RoadSegment {
   id      String @id @default(cuid())
-  pkDebut Float?
-  pkFin   Float?
+  pkStart Float?
+  pkEnd   Float?
 
-  // Colonne géométrique PostGIS — non gérée nativement par Prisma.
-  // Insertion/lecture/requêtes spatiales via prisma.$queryRaw / $executeRaw.
+  // PostGIS geometry column — not natively supported by Prisma.
+  // Insert/read/query via prisma.$queryRaw / $executeRaw.
   geom Unsupported("geometry(LineString, 4326)")
 
   routeAxisId String
   routeAxis   RouteAxis @relation(fields: [routeAxisId], references: [id], onDelete: Cascade)
 
-  incidents          Incident[]
-  itinerarySegments  ItinerarySegment[]
+  incidents         Incident[]
+  itinerarySegments ItinerarySegment[]
 
   @@index([routeAxisId])
 }
 
 // ---------------------------------------------------------------------------
-// Incidents et confirmation communautaire (cf. cahier des charges §4.3-4.4)
+// Incidents and community confirmation (cf. cahier des charges §4.3-4.4)
 // ---------------------------------------------------------------------------
 
-enum IncidentTypeLibelle {
+enum IncidentTypeLabel {
   ACCIDENT
-  BREAKDOWN 
+  BREAKDOWN
   OBSTACLE
-  INSECURITY 
-  MEDICAL_EMERGENCY 
+  INSECURITY
+  MEDICAL_EMERGENCY
 }
 
-enum SensCirculation {
-  OUTBOUND 
-  RETURN 
-  BOTH 
+enum Direction {
+  OUTBOUND
+  RETURN
+  BOTH
 }
 
-enum EtatVoie {
-  BLOCKED 
-  PARTIAL 
-  CLEAR 
+enum RoadStatus {
+  BLOCKED
+  PARTIAL
+  CLEAR
 }
 
-enum StatutIncident {
+enum IncidentStatus {
   ACTIVE
-  RESOLVED 
+  RESOLVED
 }
 
 model IncidentType {
-  id      String              @id @default(cuid())
-  libelle IncidentTypeLibelle @unique
+  id    String            @id @default(cuid())
+  label IncidentTypeLabel @unique
 
   incidents Incident[]
 }
 
 model Incident {
-  id                   String         @id @default(cuid())
-  sensCirculation      SensCirculation
-  etatVoie             EtatVoie
-  photoUrl             String?
-  statut               StatutIncident @default(ACTIVE)
-  signaleLe            DateTime       @default(now())
-  derniereConfirmation DateTime       @default(now())
+  id              String         @id @default(cuid())
+  direction       Direction
+  roadStatus      RoadStatus
+  photoUrl        String?
+  status          IncidentStatus @default(ACTIVE)
+  reportedAt      DateTime       @default(now())
+  lastConfirmedAt DateTime       @default(now())
 
-  // Position géométrique — cf. remarque sur RoadSegment.geom
+  // Geometry column — see note on RoadSegment.geom
   position Unsupported("geometry(Point, 4326)")
 
   roadSegmentId String
@@ -176,18 +176,18 @@ model Incident {
   confirmations Confirmation[]
 
   @@index([roadSegmentId])
-  @@index([statut])
+  @@index([status])
 }
 
 enum ConfirmationType {
-  STILL_THERE 
-  CLEARED 
+  STILL_THERE
+  CLEARED
 }
 
 model Confirmation {
-  id         String           @id @default(cuid())
-  type       ConfirmationType
-  horodatage DateTime         @default(now())
+  id          String           @id @default(cuid())
+  type        ConfirmationType
+  confirmedAt DateTime         @default(now())
 
   incidentId String
   incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
@@ -199,18 +199,18 @@ model Confirmation {
 }
 
 // ---------------------------------------------------------------------------
-// Itinéraires et trajets suivis (cf. cahier des charges §4.1)
+// Itineraries and tracked trips (cf. cahier des charges §4.1)
 // ---------------------------------------------------------------------------
 
 model Itinerary {
-  id      String   @id @default(cuid())
-  favori  Boolean  @default(false)
-  creeLe  DateTime @default(now())
+  id         String   @id @default(cuid())
+  isFavorite Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
-  // Départ, arrivée et tracé calculé par OpenRouteService — cf. remarque sur RoadSegment.geom
-  pointDepart   Unsupported("geometry(Point, 4326)")
-  pointArrivee  Unsupported("geometry(Point, 4326)")
-  trace         Unsupported("geometry(LineString, 4326)")?
+  // Start point, end point and computed path (OpenRouteService) — see note on RoadSegment.geom
+  startPoint Unsupported("geometry(Point, 4326)")
+  endPoint   Unsupported("geometry(Point, 4326)")
+  path       Unsupported("geometry(LineString, 4326)")?
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -234,17 +234,17 @@ model ItinerarySegment {
   @@index([roadSegmentId])
 }
 
-enum StatutTrip {
-  IN_PROGRESS 
-  COMPLETED 
-  ABANDONED 
+enum TripStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
 }
 
 model Trip {
-  id         String     @id @default(cuid())
-  statut     StatutTrip @default(IN_PROGRESS)
-  demarreLe  DateTime   @default(now())
-  termineLe  DateTime?
+  id        String     @id @default(cuid())
+  status    TripStatus @default(IN_PROGRESS)
+  startedAt DateTime   @default(now())
+  endedAt   DateTime?
 
   itineraryId String
   itinerary   Itinerary @relation(fields: [itineraryId], references: [id])
@@ -253,8 +253,8 @@ model Trip {
   user   User   @relation(fields: [userId], references: [id])
 
   @@index([userId])
-  @@index([statut])
+  @@index([status])
 }
 
-// Note : la limite « 1 itinéraire favori maximum en compte gratuit » est une
-// règle applicative vérifiée côté service, pas une contrainte de schéma.
+// Note: the "1 favorite itinerary max on a free account" rule is enforced at
+// the application layer, not as a schema constraint.
