@@ -44,13 +44,12 @@ paths:
           description: Base de données injoignable
 
   # ---------------------------------------------------------------------
-  # Authentification — non implémenté (Phase 1)
+  # Authentification — implémenté (Phase 1)
   # ---------------------------------------------------------------------
   /auth/register:
     post:
       tags: [Authentification]
       summary: Inscription d'un usager individuel (compte gratuit par défaut)
-      description: "Planifié Phase 1 — non implémenté."
       security: []
       requestBody:
         required: true
@@ -58,9 +57,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [phoneOrEmail, password]
+              required: [password]
+              description: "Au moins un des deux champs phone / email est requis."
               properties:
-                phoneOrEmail: { type: string }
+                phone: { type: string }
+                email: { type: string, format: email }
                 password: { type: string, minLength: 8 }
       responses:
         "201":
@@ -69,12 +70,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthResponse"
+        "422":
+          description: "Ni téléphone ni email fourni, ou mot de passe trop court"
 
   /auth/login:
     post:
       tags: [Authentification]
       summary: Connexion (retourne un access token et un refresh token)
-      description: "Planifié Phase 1 — non implémenté."
       security: []
       requestBody:
         required: true
@@ -82,9 +84,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [phoneOrEmail, password]
+              required: [identifier, password]
               properties:
-                phoneOrEmail: { type: string }
+                identifier:
+                  type: string
+                  description: "Numéro de téléphone OU email"
                 password: { type: string }
       responses:
         "200":
@@ -100,7 +104,6 @@ paths:
     post:
       tags: [Authentification]
       summary: Renouvelle un access token à partir du refresh token
-      description: "Planifié Phase 1 — non implémenté."
       security: []
       requestBody:
         required: true
@@ -120,13 +123,12 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
 
   # ---------------------------------------------------------------------
-  # Utilisateurs et rôles — non implémenté (Phase 1 / Phase 3)
+  # Utilisateurs et rôles — /users/me implémenté (Phase 1) ; /users/{id}/status reste Phase 3
   # ---------------------------------------------------------------------
   /users/me:
     get:
       tags: [Utilisateurs et rôles]
       summary: Profil de l'utilisateur connecté
-      description: "Planifié Phase 1 — non implémenté."
       responses:
         "200":
           description: Profil utilisateur
@@ -138,14 +140,14 @@ paths:
     patch:
       tags: [Utilisateurs et rôles]
       summary: Met à jour le profil de l'utilisateur connecté
-      description: "Planifié Phase 1 — non implémenté."
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                phoneOrEmail: { type: string }
+                phone: { type: string }
+                email: { type: string, format: email }
 
       responses:
         "200":
@@ -254,9 +256,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [phoneOrEmail, password]
+              required: [password]
+              description: "Au moins un des deux champs phone / email est requis."
               properties:
-                phoneOrEmail: { type: string }
+                phone: { type: string }
+                email: { type: string, format: email }
                 password: { type: string }
       responses:
         "201":
@@ -493,17 +497,18 @@ components:
 
     AccountStatus:
       type: string
-      enum: [GRATUIT, PREMIUM, ENTREPRISE]
+      enum: [FREE, PREMIUM, ENTERPRISE]
 
     RoleName:
       type: string
-      enum: [ADMIN_PLATEFORME, MINI_ADMIN, CHEF_EQUIPE, CHAUFFEUR, UTILISATEUR]
+      enum: [PLATFORM_ADMIN, MINI_ADMIN, TEAM_LEAD, DRIVER, USER]
 
     User:
       type: object
       properties:
         id: { type: string }
-        phoneOrEmail: { type: string }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
         accountStatus:
           $ref: "#/components/schemas/AccountStatus"
         role:
@@ -545,19 +550,19 @@ components:
 
     SensCirculation:
       type: string
-      enum: [ALLER, RETOUR, LES_DEUX]
+      enum: [OUTBOUND, RETURN, BOTH]
 
     EtatVoie:
       type: string
-      enum: [BLOQUEE, PARTIELLE, DEGAGEE]
+      enum: [BLOCKED, PARTIAL, CLEAR]
 
     StatutIncident:
       type: string
-      enum: [ACTIF, RESOLU]
+      enum: [ACTIVE, RESOLVED]
 
     ConfirmationType:
       type: string
-      enum: [TOUJOURS_LA, DEGAGE]
+      enum: [STILL_THERE, CLEARED]
 
     Incident:
       type: object
@@ -593,7 +598,7 @@ components:
 
     StatutTrip:
       type: string
-      enum: [EN_COURS, TERMINE, ABANDONNE]
+      enum: [IN_PROGRESS, COMPLETED, ABANDONED]
 
     Trip:
       type: object

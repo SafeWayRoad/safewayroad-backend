@@ -1,27 +1,27 @@
 CREATE EXTENSION IF NOT EXISTS postgis;
 -- CreateEnum
-CREATE TYPE "RoleName" AS ENUM ('ADMIN_PLATEFORME', 'MINI_ADMIN', 'CHEF_EQUIPE', 'CHAUFFEUR', 'UTILISATEUR');
+CREATE TYPE "RoleName" AS ENUM ('PLATFORM_ADMIN', 'MINI_ADMIN', 'TEAM_LEAD', 'DRIVER', 'USER');
 
 -- CreateEnum
-CREATE TYPE "AccountStatus" AS ENUM ('GRATUIT', 'PREMIUM', 'ENTREPRISE');
+CREATE TYPE "AccountStatus" AS ENUM ('FREE', 'PREMIUM', 'ENTERPRISE');
 
 -- CreateEnum
-CREATE TYPE "IncidentTypeLibelle" AS ENUM ('ACCIDENT', 'PANNE', 'OBSTACLE', 'INSECURITE', 'URGENCE_MEDICALE');
+CREATE TYPE "IncidentTypeLibelle" AS ENUM ('ACCIDENT', 'BREAKDOWN', 'OBSTACLE', 'INSECURITY', 'MEDICAL_EMERGENCY');
 
 -- CreateEnum
-CREATE TYPE "SensCirculation" AS ENUM ('ALLER', 'RETOUR', 'LES_DEUX');
+CREATE TYPE "SensCirculation" AS ENUM ('OUTBOUND', 'RETURN', 'BOTH');
 
 -- CreateEnum
-CREATE TYPE "EtatVoie" AS ENUM ('BLOQUEE', 'PARTIELLE', 'DEGAGEE');
+CREATE TYPE "EtatVoie" AS ENUM ('BLOCKED', 'PARTIAL', 'CLEAR');
 
 -- CreateEnum
-CREATE TYPE "StatutIncident" AS ENUM ('ACTIF', 'RESOLU');
+CREATE TYPE "StatutIncident" AS ENUM ('ACTIVE', 'RESOLVED');
 
 -- CreateEnum
-CREATE TYPE "ConfirmationType" AS ENUM ('TOUJOURS_LA', 'DEGAGE');
+CREATE TYPE "ConfirmationType" AS ENUM ('STILL_THERE', 'CLEARED');
 
 -- CreateEnum
-CREATE TYPE "StatutTrip" AS ENUM ('EN_COURS', 'TERMINE', 'ABANDONNE');
+CREATE TYPE "StatutTrip" AS ENUM ('IN_PROGRESS', 'COMPLETED', 'ABANDONED');
 
 -- CreateTable
 CREATE TABLE "Role" (
@@ -57,9 +57,10 @@ CREATE TABLE "Team" (
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
-    "phoneOrEmail" TEXT NOT NULL,
+    "phone" TEXT,
+    "email" TEXT,
     "passwordHash" TEXT NOT NULL,
-    "accountStatus" "AccountStatus" NOT NULL DEFAULT 'GRATUIT',
+    "accountStatus" "AccountStatus" NOT NULL DEFAULT 'FREE',
     "actif" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "roleId" TEXT NOT NULL,
@@ -103,7 +104,7 @@ CREATE TABLE "Incident" (
     "sensCirculation" "SensCirculation" NOT NULL,
     "etatVoie" "EtatVoie" NOT NULL,
     "photoUrl" TEXT,
-    "statut" "StatutIncident" NOT NULL DEFAULT 'ACTIF',
+    "statut" "StatutIncident" NOT NULL DEFAULT 'ACTIVE',
     "signaleLe" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "derniereConfirmation" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "position" geometry(Point, 4326) NOT NULL,
@@ -150,7 +151,7 @@ CREATE TABLE "ItinerarySegment" (
 -- CreateTable
 CREATE TABLE "Trip" (
     "id" TEXT NOT NULL,
-    "statut" "StatutTrip" NOT NULL DEFAULT 'EN_COURS',
+    "statut" "StatutTrip" NOT NULL DEFAULT 'IN_PROGRESS',
     "demarreLe" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "termineLe" TIMESTAMP(3),
     "itineraryId" TEXT NOT NULL,
@@ -166,7 +167,10 @@ CREATE UNIQUE INDEX "Role_name_key" ON "Role"("name");
 CREATE UNIQUE INDEX "Company_miniAdminId_key" ON "Company"("miniAdminId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_phoneOrEmail_key" ON "User"("phoneOrEmail");
+CREATE UNIQUE INDEX "User_phone_key" ON "User"("phone");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
 CREATE INDEX "User_companyId_idx" ON "User"("companyId");
@@ -253,7 +257,11 @@ ALTER TABLE "Trip" ADD CONSTRAINT "Trip_itineraryId_fkey" FOREIGN KEY ("itinerar
 ALTER TABLE "Trip" ADD CONSTRAINT "Trip_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 CREATE INDEX idx_road_segment_geom ON "RoadSegment" USING GIST (geom);
+
 CREATE INDEX idx_incident_position ON "Incident" USING GIST (position);
+
 CREATE INDEX idx_itinerary_point_depart ON "Itinerary" USING GIST ("pointDepart");
+
 CREATE INDEX idx_itinerary_point_arrivee ON "Itinerary" USING GIST ("pointArrivee");
+
 CREATE INDEX idx_itinerary_trace ON "Itinerary" USING GIST (trace);

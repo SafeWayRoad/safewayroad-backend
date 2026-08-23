@@ -9,6 +9,8 @@ const envSchema = z.object({
 
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.coerce.number().default(3600),
+  // Durée de vie du refresh token, en secondes (défaut : 30 jours).
+  JWT_REFRESH_EXPIRES_IN: z.coerce.number().default(60 * 60 * 24 * 30),
 
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),

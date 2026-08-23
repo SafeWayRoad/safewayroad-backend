@@ -8,20 +8,24 @@ datasource db {
 
 // ---------------------------------------------------------------------------
 // Rôles, comptes entreprise et utilisateurs (cf. cahier des charges §3.2)
+//
+// Note : les valeurs d'énumération ci-dessous sont volontairement en anglais
+// (informations "fixes et critiques" manipulées directement par le code),
+// même si la documentation produit et les commentaires restent en français.
 // ---------------------------------------------------------------------------
 
 enum RoleName {
-  ADMIN_PLATEFORME
+  PLATFORM_ADMIN 
   MINI_ADMIN
-  CHEF_EQUIPE
-  CHAUFFEUR
-  UTILISATEUR
+  TEAM_LEAD 
+  DRIVER 
+  USER 
 }
 
 enum AccountStatus {
-  GRATUIT
+  FREE 
   PREMIUM
-  ENTREPRISE
+  ENTERPRISE 
 }
 
 model Role {
@@ -57,9 +61,10 @@ model Team {
 
 model User {
   id             String        @id @default(cuid())
-  phoneOrEmail   String        @unique
+  phone          String?       @unique
+  email          String?       @unique
   passwordHash   String
-  accountStatus  AccountStatus @default(GRATUIT)
+  accountStatus  AccountStatus @default(FREE)
   actif          Boolean       @default(true)
   createdAt      DateTime      @default(now())
 
@@ -117,27 +122,27 @@ model RoadSegment {
 
 enum IncidentTypeLibelle {
   ACCIDENT
-  PANNE
+  BREAKDOWN 
   OBSTACLE
-  INSECURITE
-  URGENCE_MEDICALE
+  INSECURITY 
+  MEDICAL_EMERGENCY 
 }
 
 enum SensCirculation {
-  ALLER
-  RETOUR
-  LES_DEUX
+  OUTBOUND 
+  RETURN 
+  BOTH 
 }
 
 enum EtatVoie {
-  BLOQUEE
-  PARTIELLE
-  DEGAGEE
+  BLOCKED 
+  PARTIAL 
+  CLEAR 
 }
 
 enum StatutIncident {
-  ACTIF
-  RESOLU
+  ACTIVE
+  RESOLVED 
 }
 
 model IncidentType {
@@ -152,7 +157,7 @@ model Incident {
   sensCirculation      SensCirculation
   etatVoie             EtatVoie
   photoUrl             String?
-  statut               StatutIncident @default(ACTIF)
+  statut               StatutIncident @default(ACTIVE)
   signaleLe            DateTime       @default(now())
   derniereConfirmation DateTime       @default(now())
 
@@ -175,8 +180,8 @@ model Incident {
 }
 
 enum ConfirmationType {
-  TOUJOURS_LA
-  DEGAGE
+  STILL_THERE 
+  CLEARED 
 }
 
 model Confirmation {
@@ -230,14 +235,14 @@ model ItinerarySegment {
 }
 
 enum StatutTrip {
-  EN_COURS
-  TERMINE
-  ABANDONNE
+  IN_PROGRESS 
+  COMPLETED 
+  ABANDONED 
 }
 
 model Trip {
   id         String     @id @default(cuid())
-  statut     StatutTrip @default(EN_COURS)
+  statut     StatutTrip @default(IN_PROGRESS)
   demarreLe  DateTime   @default(now())
   termineLe  DateTime?
 
