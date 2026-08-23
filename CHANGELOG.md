@@ -10,7 +10,10 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### Ajouté
-- (à compléter au fil des Pull Requests)
+- Connexion Cloudflare R2 validée de bout en bout (upload + lecture publique des photos)
+
+### Modifié
+- Migration PostGIS entièrement pilotée par `prisma migrate` (suppression de l'ancienne approche SQL manuelle)
 
 ---
 
