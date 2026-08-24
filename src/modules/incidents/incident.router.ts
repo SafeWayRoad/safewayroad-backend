@@ -6,16 +6,16 @@ import { uploadIncidentPhoto } from "../../shared/utils/upload";
 import { AppError } from "../../shared/utils/app-error";
 
 const router = Router();
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-});
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const createIncidentSchema = z.object({
-  roadSegmentId: z.string(),
-  incidentTypeId: z.string(),
-  latitude: z.coerce.number(),
-  longitude: z.coerce.number(),
+  // cuid() matches Prisma's default id format (RoadSegment/IncidentType ids)
+  // — rejects malformed identifiers with a 422 before a database call is
+  // even made, instead of letting a bad id reach the SQL layer.
+  roadSegmentId: z.string().cuid("roadSegmentId must be a valid identifier"),
+  incidentTypeId: z.string().cuid("incidentTypeId must be a valid identifier"),
+  latitude: z.coerce.number().min(-90, "latitude must be between -90 and 90").max(90, "latitude must be between -90 and 90"),
+  longitude: z.coerce.number().min(-180, "longitude must be between -180 and 180").max(180, "longitude must be between -180 and 180"),
   direction: z.enum(["OUTBOUND", "RETURN", "BOTH"]),
   roadStatus: z.enum(["BLOCKED", "PARTIAL", "CLEAR"]),
 });
@@ -35,10 +35,7 @@ router.post("/incidents", upload.single("photo"), async (req, res, next) => {
   try {
     const parsed = createIncidentSchema.safeParse(req.body);
     if (!parsed.success) {
-      throw new AppError(
-        parsed.error.issues.map((i) => i.message).join(", "),
-        422,
-      );
+      throw new AppError(parsed.error.issues.map((i) => i.message).join(", "), 422);
     }
 
     const photoUrl = req.file ? await uploadIncidentPhoto(req.file) : null;

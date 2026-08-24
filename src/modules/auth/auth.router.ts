@@ -12,7 +12,7 @@ const registerSchema = z
     password: z.string().min(8),
   })
   .refine((data) => Boolean(data.phone || data.email), {
-    message: "Le numéro de téléphone ou l'email est requis",
+    message: "Phone number or email is required",
     path: ["phone"],
   });
 
@@ -32,7 +32,7 @@ router.post("/auth/register", async (req, res, next) => {
 });
 
 const loginSchema = z.object({
-  identifier: z.string().min(3), // numéro de téléphone OU email
+  identifier: z.string().min(3), // phone number OR email
   password: z.string().min(8),
 });
 

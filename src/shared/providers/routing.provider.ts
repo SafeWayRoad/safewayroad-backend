@@ -30,7 +30,7 @@ export interface RoutingProvider {
 export class OpenRouteServiceProvider implements RoutingProvider {
   async getRoute(origin: LatLng, destination: LatLng): Promise<RouteResult> {
     if (!env.ORS_API_KEY) {
-      throw new AppError("ORS_API_KEY n'est pas configuré", 500);
+      throw new AppError("ORS_API_KEY is not configured", 500);
     }
 
     const response = await fetch(
@@ -53,7 +53,7 @@ export class OpenRouteServiceProvider implements RoutingProvider {
     if (!response.ok) {
       const body = await response.text();
       throw new AppError(
-        `Erreur OpenRouteService (${response.status}) : ${body}`,
+        `OpenRouteService error (${response.status}): ${body}`,
         502,
       );
     }
@@ -67,10 +67,7 @@ export class OpenRouteServiceProvider implements RoutingProvider {
 
     const feature = data.features?.[0];
     if (!feature) {
-      throw new AppError(
-        "Réponse OpenRouteService inexploitable (aucun tracé)",
-        502,
-      );
+      throw new AppError("Unusable OpenRouteService response (no route)", 502);
     }
 
     return {

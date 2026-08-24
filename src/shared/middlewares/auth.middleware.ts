@@ -29,7 +29,7 @@ function extractBearerToken(req: Request): string | null {
 export function authenticate(req: Request, _res: Response, next: NextFunction) {
   const token = extractBearerToken(req);
   if (!token) {
-    return next(new AppError("Authentification requise", 401));
+    return next(new AppError("Authentication required", 401));
   }
 
   try {
@@ -43,7 +43,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
     };
     next();
   } catch {
-    next(new AppError("Token invalide ou expiré", 401));
+    next(new AppError("Invalid or expired token", 401));
   }
 }
 
@@ -52,11 +52,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction) {
  * possible without an account, but reportedById should be filled in when the
  * user is logged in (cf. cahier des charges §4.3).
  */
-export function optionalAuthenticate(
-  req: Request,
-  _res: Response,
-  next: NextFunction,
-) {
+export function optionalAuthenticate(req: Request, _res: Response, next: NextFunction) {
   const token = extractBearerToken(req);
   if (!token) return next();
 
@@ -86,10 +82,10 @@ export function optionalAuthenticate(
  */
 export function requireMinRole(minRole: RoleName) {
   return (req: Request, _res: Response, next: NextFunction) => {
-    if (!req.user) return next(new AppError("Authentification requise", 401));
+    if (!req.user) return next(new AppError("Authentication required", 401));
 
     if (req.user.hierarchyLevel < getHierarchyLevel(minRole)) {
-      return next(new AppError("Accès refusé : rôle insuffisant", 403));
+      return next(new AppError("Access denied: insufficient role", 403));
     }
     next();
   };
@@ -98,9 +94,9 @@ export function requireMinRole(minRole: RoleName) {
 /** Authorizes only an exact list of roles (ex. reserved to the platform administrator). */
 export function requireExactRole(...roles: RoleName[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
-    if (!req.user) return next(new AppError("Authentification requise", 401));
+    if (!req.user) return next(new AppError("Authentication required", 401));
     if (!roles.includes(req.user.role)) {
-      return next(new AppError("Accès refusé : rôle insuffisant", 403));
+      return next(new AppError("Access denied: insufficient role", 403));
     }
     next();
   };

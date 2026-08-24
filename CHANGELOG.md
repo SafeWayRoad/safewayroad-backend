@@ -16,6 +16,7 @@ _Rien pour l'instant — prochaine section à alimenter au fil de la Phase 2._
 ## [0.2.0] — 2026-08-23 — Phase 1 — Fondations techniques
 
 ### ⚠️ Cassant (breaking change)
+
 - **Séparation `phoneOrEmail` en deux colonnes distinctes `phone` et `email`** sur `User`. Au moins l'un des deux est requis — validé **uniquement côté application** (Zod dans `auth.router.ts` / `user.router.ts`), pas de contrainte `CHECK` en base (choix délibéré pour rester sur un workflow 100 % piloté par `prisma migrate dev`, sans édition manuelle de SQL). Impact API :
   - `POST /auth/register` : accepte désormais `phone`/`email` (au moins un requis) au lieu de `phoneOrEmail`.
   - `POST /auth/login` : accepte `identifier` (téléphone OU email) au lieu de `phoneOrEmail`.
@@ -36,6 +37,7 @@ _Rien pour l'instant — prochaine section à alimenter au fil de la Phase 2._
 > Note de convention (mise à jour) : après cette seconde passe, l'ensemble du vocabulaire du schéma (modèles, champs, enums) est en anglais. Seul le **contenu** effectivement saisi par les usagers (nom d'une entreprise, texte libre d'un signalement...) reste libre, en français comme dans toute autre langue — cohérent avec le futur frontend prévu par défaut en anglais avec bascule français (hors périmètre pour l'instant).
 
 ### Ajouté
+
 - Authentification JWT (access token + refresh token) : `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`
 - Middleware d'autorisation par rôle hiérarchique (`authenticate`, `optionalAuthenticate`, `requireMinRole`, `requireExactRole`)
 - Profil utilisateur connecté : `GET /users/me`, `PATCH /users/me`
@@ -45,23 +47,39 @@ _Rien pour l'instant — prochaine section à alimenter au fil de la Phase 2._
 - `src/shared/config/role-hierarchy.ts` : cache mémoire de `Role.hierarchyLevel`, chargé une fois au démarrage du serveur et embarqué dans le JWT à la connexion — supprime la constante `NIVEAU_HIERARCHIQUE` dupliquée à la main dans `auth.middleware.ts`, sans requête DB supplémentaire par appel
 
 ### Corrigé
+
 - `database.ts` : le tableau de config `log` est désormais typé `as const`, ce qui permet à `$on("error"|"warn", ...)` d'être correctement typé — suppression du `(client as any).$on(...)` qui contournait le typage
 - `auth.service.ts` : le type `UserWithRole` est désormais dérivé de `Prisma.UserGetPayload<{ include: { role: true } }>` au lieu d'être recopié à la main — reste automatiquement juste si le schéma évolue
 - Retrait de `@types/bcryptjs` des devDependencies (`bcryptjs@3.x` embarque désormais ses propres types ; le paquet `@types/bcryptjs` était devenu redondant)
+- `POST /incidents` renvoyait un `500` opaque quand `roadSegmentId`/`incidentTypeId` ne correspondait à aucun enregistrement (violation de contrainte de clé étrangère PostgreSQL non interceptée) — `incident.service.ts` vérifie désormais l'existence des deux avant l'insertion et renvoie un `404` explicite
+- `incident.router.ts` : validation Zod renforcée — `roadSegmentId`/`incidentTypeId` doivent être des `cuid()` valides (rejet en `422` avant tout appel base), `latitude`/`longitude` bornées à des plages géographiques valides (`422` sinon)
+- `error-handler.ts` : défense en profondeur — toute violation de contrainte Prisma (`P2002` unique, `P2003` clé étrangère, `P2025` enregistrement manquant) qui échapperait à une vérification applicative est désormais traduite en `409`/`422`/`404` explicite au lieu d'un `500` générique
+- Tous les messages d'erreur applicatifs (`AppError`, middlewares, validations Zod) sont désormais en anglais, cohérent avec le reste du code — seul le contenu réellement saisi par les usagers reste multilingue
 - Contrôle de typage (`tsc --noEmit`, mode strict) revalidé après l'ensemble de ces changements — aucune erreur
 
+### Vérifié — pas une faille
+
+- Audit de `incident.service.ts` suite à une question sur le risque d'injection SQL : les requêtes `$queryRaw`/`$executeRaw` utilisées en _tagged template_ lient chaque valeur interpolée comme un paramètre de requête préparée (aucune concaténation dans le texte SQL) — **pas de vulnérabilité d'injection SQL**. Commentaire ajouté dans le code pour documenter cette garantie et la règle à ne jamais franchir (ne jamais passer à `$queryRawUnsafe`/`$executeRawUnsafe`)
+
+### Limitation connue (documentée, non bloquante)
+
+- **Absence de révocation des tokens** : `POST /auth/refresh` et une nouvelle connexion (`POST /auth/login`) émettent une nouvelle paire de tokens sans invalider les précédentes (JWT stateless, aucun stockage serveur). Un refresh token qui fuite reste exploitable jusqu'à son expiration naturelle (`JWT_REFRESH_EXPIRES_IN`, 30 jours par défaut), même après reconnexion légitime. Mitigation partielle actuelle : durée de vie courte de l'access token (`JWT_EXPIRES_IN`, 1h par défaut) qui limite la fenêtre d'exposition réelle côté API. **Décision actée le 23/08/2026** : traiter ce point en Phase 5 — Durcissement (mécanisme de révocation à base de table `RefreshToken` ou de `tokenVersion` sur `User`), plutôt que de bloquer le tag v0.2.0.
+
 ### Validé
+
 - Authentification testée de bout en bout dans Postman (`register` → `login` → `users/me`) — premier passage le 23/08/2026 avec l'ancien champ `phoneOrEmail`
 - Test d'intégration OpenRouteService validé en conditions réelles (axe Douala → Yaoundé : 236,1 km, ~179 min, 2238 points de tracé)
 - **Re-test Postman complet effectué avec succès après la migration phone/email + enums anglais (23/08/2026)** : `register` (téléphone et email), `login` via `identifier`, `GET`/`PATCH /users/me`, `refresh`, cas d'erreur (mot de passe erroné → 401, identifiant déjà utilisé → 409, champs manquants → 422, sans token → 401), `POST`/`GET /incidents` avec les enums anglais (`OUTBOUND`, `BLOCKED`...)
 - Script `test-ors.ts` rejoué avec succès après le reset de base
 - Contrôle de typage (`tsc --noEmit`, mode strict) validé sur l'ensemble du code source de la Phase 1 — aucune erreur
+- **Re-test complet après l'anglicisation du schéma et les corrections de validation/sécurité (23/08/2026)** : tous les endpoints repassés en Postman avec succès ; `POST /incidents` avec un `roadSegmentId` invalide renvoie désormais un `404` explicite au lieu d'un `500`
 
 ---
 
 ## [0.1.0] — Phase 0 — Cadrage
 
 ### Ajouté
+
 - Cahier des charges fonctionnel (v1.2)
 - Architecture technique (stack, modèle de données, flux séquentiels)
 - Maquettes des 4 parcours prioritaires (planification, signalement, suivi, dashboard mini-admin)

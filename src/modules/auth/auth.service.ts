@@ -2,11 +2,7 @@ import bcrypt from "bcryptjs";
 import { Prisma, RoleName } from "@prisma/client";
 import { prisma } from "../../shared/config/database";
 import { AppError } from "../../shared/utils/app-error";
-import {
-  signAccessToken,
-  signRefreshToken,
-  verifyRefreshToken,
-} from "../../shared/utils/jwt";
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../shared/utils/jwt";
 
 const SALT_ROUNDS = 10;
 
@@ -69,7 +65,7 @@ export interface RegisterInput {
  */
 export async function registerUser(input: RegisterInput): Promise<AuthResult> {
   if (!input.phone && !input.email) {
-    throw new AppError("Le numéro de téléphone ou l'email est requis", 422);
+    throw new AppError("Phone number or email is required", 422);
   }
 
   const existing = await prisma.user.findFirst({
@@ -81,16 +77,13 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
     },
   });
   if (existing) {
-    throw new AppError("Un compte existe déjà avec cet identifiant", 409);
+    throw new AppError("An account already exists with this identifier", 409);
   }
 
   const role = await prisma.role.findUnique({ where: { name: "USER" } });
   if (!role) {
     // The USER role must be seeded (prisma/seed.ts) before any sign-up.
-    throw new AppError(
-      "Configuration serveur incomplète (rôle USER manquant)",
-      500,
-    );
+    throw new AppError("Incomplete server configuration (USER role missing)", 500);
   }
 
   const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
@@ -125,25 +118,23 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
   // Deliberately identical message (unknown identifier / wrong password /
   // disabled account) so as not to reveal whether an identifier exists.
   if (!user || !user.isActive) {
-    throw new AppError("Identifiants invalides", 401);
+    throw new AppError("Invalid credentials", 401);
   }
 
   const valid = await bcrypt.compare(input.password, user.passwordHash);
   if (!valid) {
-    throw new AppError("Identifiants invalides", 401);
+    throw new AppError("Invalid credentials", 401);
   }
 
   return buildAuthResult(user);
 }
 
-export async function refreshAccessToken(
-  refreshToken: string,
-): Promise<AuthResult> {
+export async function refreshAccessToken(refreshToken: string): Promise<AuthResult> {
   let payload;
   try {
     payload = verifyRefreshToken(refreshToken);
   } catch {
-    throw new AppError("Refresh token invalide ou expiré", 401);
+    throw new AppError("Invalid or expired refresh token", 401);
   }
 
   const user = await prisma.user.findUnique({
@@ -152,7 +143,7 @@ export async function refreshAccessToken(
   });
 
   if (!user || !user.isActive) {
-    throw new AppError("Compte introuvable ou désactivé", 401);
+    throw new AppError("Account not found or disabled", 401);
   }
 
   return buildAuthResult(user);

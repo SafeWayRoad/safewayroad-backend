@@ -9,14 +9,14 @@ const BUCKET = env.R2_BUCKET_INCIDENTS;
 
 const publicUrlFor = (key: string): string => {
   if (!env.R2_PUBLIC_URL) {
-    throw new AppError("R2_PUBLIC_URL n'est pas configuré", 500);
+    throw new AppError("R2_PUBLIC_URL is not configured", 500);
   }
   return `${env.R2_PUBLIC_URL}/${key}`;
 };
 
 /**
- * Upload une photo de signalement vers R2, après compression côté client (en amont, côté PWA).
- * Retourne l'URL publique à stocker dans Incident.photoUrl.
+ * Uploads an incident photo to R2, after client-side compression (upstream,
+ * in the PWA). Returns the public URL to store in Incident.photoUrl.
  */
 export const uploadIncidentPhoto = async (file: Express.Multer.File): Promise<string> => {
   const ext = path.extname(file.originalname) || ".jpg";
