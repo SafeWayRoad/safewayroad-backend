@@ -9,6 +9,10 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
+- Module `confirmations` : `POST /incidents/{id}/confirmations` (accessible sans compte, comme le
+  signalement). `STILL_THERE` met à jour `lastConfirmedAt` ; `CLEARED` fait passer l'incident en
+  `RESOLVED` après 3 confirmations "dégagé" cumulées — seuil documenté en constante
+  (`CLEARED_RESOLUTION_THRESHOLD`), à ajuster une fois des données réelles du pilote disponibles
 - Module `itineraries` : `POST /itineraries` (calcul via `RoutingProvider`, rattachement aux
   `RoadSegment` traversés via `ST_Intersects`, incidents actifs superposés) et
   `POST /itineraries/{id}/favorite` (règle "1 favori max en compte gratuit", applicative, idempotente)

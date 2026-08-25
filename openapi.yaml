@@ -353,27 +353,30 @@ paths:
         "422":
           description: Corps de requête invalide
 
-  /incidents/{id}/confirmations:
-    post:
-      tags: [Incidents]
-      summary: Confirme qu'un incident est toujours présent ou a été dégagé
-      description: "Planifié Phase 2 — non implémenté."
-      security: []
-      parameters:
-        - $ref: "#/components/parameters/IdParam"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [type]
-              properties:
-                type:
-                  $ref: "#/components/schemas/ConfirmationType"
-      responses:
-        "201":
-          description: Confirmation enregistrée
+    /incidents/{id}/confirmations:
+      post:
+        tags: [Incidents]
+        summary: Confirme qu'un incident est toujours présent ou a été dégagé
+        security: []
+        parameters:
+          - $ref: "#/components/parameters/IdParam"
+        requestBody:
+          required: true
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [type]
+                properties:
+                  type:
+                    $ref: "#/components/schemas/ConfirmationType"
+        responses:
+          "201":
+            description: Confirmation enregistrée
+          "404":
+            description: Incident introuvable
+          "422":
+            description: "Identifiant ou type de confirmation invalide"
 
     # ---------------------------------------------------------------------
     # Itinéraires —  implémenté
