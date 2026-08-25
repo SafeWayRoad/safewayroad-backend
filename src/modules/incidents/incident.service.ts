@@ -20,9 +20,15 @@ import { AppError } from "../../shared/utils/app-error";
  * here — never switch this to $queryRawUnsafe / $executeRawUnsafe.)
  */
 
+export type IncidentTypeLabelInput =
+  | "ACCIDENT"
+  | "BREAKDOWN"
+  | "OBSTACLE"
+  | "INSECURITY"
+  | "MEDICAL_EMERGENCY";
+
 export interface CreateIncidentInput {
-  roadSegmentId: string;
-  incidentTypeId: string;
+  incidentTypeLabel: IncidentTypeLabelInput;
   reportedById?: string | null;
   latitude: number;
   longitude: number;
@@ -31,19 +37,40 @@ export interface CreateIncidentInput {
   photoUrl?: string | null;
 }
 
+/**
+ * Fix (issue #1): the client no longer supplies roadSegmentId/incidentTypeId
+ * (cuid()s it has no legitimate way to know — no endpoint ever exposed them).
+ * Instead:
+ *  - incidentTypeLabel is resolved to its id via a direct lookup (fixed set
+ *    of 5 enum values, seeded in prisma/seed.ts).
+ *  - roadSegmentId is resolved server-side to the nearest RoadSegment using
+ *    PostGIS's KNN "<->" operator, which uses the existing GiST index
+ *    (idx_road_segment_geom) — this is the design already documented in
+ *    sequence_02_signalement_incident.mermaid (ST_ClosestPoint rattachement),
+ *    just not what Phase 1 actually implemented.
+ */
 export async function createIncident(input: CreateIncidentInput) {
-  // Explicit existence checks before insert: an unknown foreign key would
-  // otherwise surface as a raw Postgres constraint violation, caught by the
-  // generic error handler as an opaque 500. Checking upfront lets us return
-  // a precise, actionable error instead.
-  const roadSegment = await prisma.roadSegment.findUnique({ where: { id: input.roadSegmentId } });
-  if (!roadSegment) {
-    throw new AppError(`Road segment not found: ${input.roadSegmentId}`, 404);
+  const incidentType = await prisma.incidentType.findUnique({
+    where: { label: input.incidentTypeLabel },
+  });
+  if (!incidentType) {
+    // Should never happen once the 5 fixed labels are seeded — surfaced as
+    // a clear 500 rather than an opaque foreign-key failure if seeding was
+    // ever incomplete.
+    throw new AppError(`Incident type not seeded: ${input.incidentTypeLabel}`, 500);
   }
 
-  const incidentType = await prisma.incidentType.findUnique({ where: { id: input.incidentTypeId } });
-  if (!incidentType) {
-    throw new AppError(`Incident type not found: ${input.incidentTypeId}`, 404);
+  const nearestSegment = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id
+    FROM "RoadSegment"
+    ORDER BY geom <-> ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326)
+    LIMIT 1;
+  `;
+  const roadSegmentId = nearestSegment[0]?.id;
+  if (!roadSegmentId) {
+    // Empty RoadSegment table (no coverage yet) — a data/config issue, not
+    // a malformed request, but still explicit rather than a raw 500.
+    throw new AppError("No road segment currently covers this location", 422);
   }
 
   const id = randomUUID();
@@ -55,7 +82,7 @@ export async function createIncident(input: CreateIncidentInput) {
       status, "reportedAt", "lastConfirmedAt"
     )
     VALUES (
-      ${id}, ${input.roadSegmentId}, ${input.incidentTypeId}, ${input.reportedById ?? null},
+      ${id}, ${roadSegmentId}, ${incidentType.id}, ${input.reportedById ?? null},
       ST_SetSRID(ST_MakePoint(${input.longitude}, ${input.latitude}), 4326),
       ${input.direction}::"Direction",
       ${input.roadStatus}::"RoadStatus",

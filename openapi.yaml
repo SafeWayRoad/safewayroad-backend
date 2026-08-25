@@ -325,17 +325,11 @@ paths:
             schema:
               type: object
               required:
-                [
-                  roadSegmentId,
-                  incidentTypeId,
-                  latitude,
-                  longitude,
-                  direction,
-                  roadStatus,
-                ]
+                [incidentTypeLabel, latitude, longitude, direction, roadStatus]
               properties:
-                roadSegmentId: { type: string }
-                incidentTypeId: { type: string }
+                IncidentTypeLabel:
+                  type: string
+                  enum: [ACCIDENT, BREAKDOWN, OBSTACLE, INSECURITY, MEDICAL_EMERGENCY]
                 latitude: { type: number }
                 longitude: { type: number }
                 direction:
