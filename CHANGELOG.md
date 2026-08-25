@@ -9,7 +9,17 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
-_Rien pour l'instant — prochaine section à alimenter au fil de la Phase 2._
+### ⚠️ Cassant (breaking change)
+
+- **`POST /incidents` : `roadSegmentId`/`incidentTypeId` remplacés par la résolution automatique
+  côté serveur.** Le client ne peut légitimement pas connaître ces `cuid()` (aucun endpoint ne les
+  a jamais exposés) — corrige un écart entre l'implémentation Phase 1 et le flux documenté depuis
+  le cadrage (`sequence_02_signalement_incident.mermaid` : rattachement au tronçon le plus proche
+  effectué par le backend). Nouveau champ `incidentTypeLabel` (enum, remplace `incidentTypeId`) ;
+  `roadSegmentId` résolu via une requête PostGIS KNN (`ORDER BY geom <-> position LIMIT 1`),
+  réutilisant l'index GiST existant (`idx_road_segment_geom`) — aucune migration nécessaire.
+  Nouveau cas d'erreur : `422` si aucun `RoadSegment` ne couvre la position (base vide/hors
+  couverture).
 
 ---
 
