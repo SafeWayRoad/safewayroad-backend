@@ -9,7 +9,9 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
-_Rien pour l'instant — prochaine section à alimenter au fil de la Phase 2._
+- Module `itineraries` : `POST /itineraries` (calcul via `RoutingProvider`, rattachement aux
+  `RoadSegment` traversés via `ST_Intersects`, incidents actifs superposés) et
+  `POST /itineraries/{id}/favorite` (règle "1 favori max en compte gratuit", applicative, idempotente)
 
 ---
 

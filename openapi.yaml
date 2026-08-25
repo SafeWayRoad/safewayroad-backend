@@ -381,46 +381,53 @@ paths:
         "201":
           description: Confirmation enregistrée
 
-  # ---------------------------------------------------------------------
-  # Itinéraires — non implémenté (Phase 2)
-  # ---------------------------------------------------------------------
-  /itineraries:
-    post:
-      tags: [Itinéraires]
-      summary: Calcule un itinéraire (via OpenRouteService) et superpose les incidents actifs
-      description: "Planifié Phase 2 — non implémenté."
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [origin, destination]
-              properties:
-                origin:
-                  $ref: "#/components/schemas/LatLng"
-                destination:
-                  $ref: "#/components/schemas/LatLng"
-      responses:
-        "201":
-          description: Itinéraire calculé
+    # ---------------------------------------------------------------------
+    # Itinéraires —  implémenté
+    # ---------------------------------------------------------------------
+    /itineraries:
+      post:
+        tags: [Itinéraires]
+        summary: Calcule un itinéraire (via OpenRouteService) et superpose les incidents actifs
+        # requiert une authentification (bearerAuth par défaut)
+        requestBody:
+          required: true
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Itinerary"
+                type: object
+                required: [origin, destination]
+                properties:
+                  origin:
+                    $ref: "#/components/schemas/LatLng"
+                  destination:
+                    $ref: "#/components/schemas/LatLng"
+        responses:
+          "201":
+            description: Itinéraire calculé
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Itinerary"
+          "401":
+            description: Authentification requise
+          "422":
+            description: Coordonnées invalides
 
   /itineraries/{id}/favorite:
     post:
       tags: [Itinéraires]
       summary: Enregistre l'itinéraire en favori (limite 1 en compte gratuit)
-      description: "Planifié Phase 2 — non implémenté."
       parameters:
         - $ref: "#/components/parameters/IdParam"
       responses:
         "200":
           description: Itinéraire marqué favori
+        "401":
+          description: Authentification requise
         "403":
-          description: Limite de favoris atteinte pour un compte gratuit
+          description: "Itinéraire d'un autre utilisateur, ou limite de favoris atteinte pour un compte gratuit"
+        "404":
+          description: Itinéraire introuvable
 
   # ---------------------------------------------------------------------
   # Trajets — non implémenté (Phase 4)
