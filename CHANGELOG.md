@@ -9,7 +9,10 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ## [Unreleased]
 
-_Rien pour l'instant — prochaine section à alimenter au fil de la Phase 2._
+- Module `confirmations` : `POST /incidents/{id}/confirmations` (accessible sans compte, comme le
+  signalement). `STILL_THERE` met à jour `lastConfirmedAt` ; `CLEARED` fait passer l'incident en
+  `RESOLVED` après 3 confirmations "dégagé" cumulées — seuil documenté en constante
+  (`CLEARED_RESOLUTION_THRESHOLD`), à ajuster une fois des données réelles du pilote disponibles
 
 ---
 
