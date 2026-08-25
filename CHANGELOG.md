@@ -13,6 +13,21 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
   signalement). `STILL_THERE` met à jour `lastConfirmedAt` ; `CLEARED` fait passer l'incident en
   `RESOLVED` après 3 confirmations "dégagé" cumulées — seuil documenté en constante
   (`CLEARED_RESOLUTION_THRESHOLD`), à ajuster une fois des données réelles du pilote disponibles
+- Module `itineraries` : `POST /itineraries` (calcul via `RoutingProvider`, rattachement aux
+  `RoadSegment` traversés via `ST_Intersects`, incidents actifs superposés) et
+  `POST /itineraries/{id}/favorite` (règle "1 favori max en compte gratuit", applicative, idempotente)
+
+### ⚠️ Cassant (breaking change)
+
+- **`POST /incidents` : `roadSegmentId`/`incidentTypeId` remplacés par la résolution automatique
+  côté serveur.** Le client ne peut légitimement pas connaître ces `cuid()` (aucun endpoint ne les
+  a jamais exposés) — corrige un écart entre l'implémentation Phase 1 et le flux documenté depuis
+  le cadrage (`sequence_02_signalement_incident.mermaid` : rattachement au tronçon le plus proche
+  effectué par le backend). Nouveau champ `incidentTypeLabel` (enum, remplace `incidentTypeId`) ;
+  `roadSegmentId` résolu via une requête PostGIS KNN (`ORDER BY geom <-> position LIMIT 1`),
+  réutilisant l'index GiST existant (`idx_road_segment_geom`) — aucune migration nécessaire.
+  Nouveau cas d'erreur : `422` si aucun `RoadSegment` ne couvre la position (base vide/hors
+  couverture).
 
 ---
 

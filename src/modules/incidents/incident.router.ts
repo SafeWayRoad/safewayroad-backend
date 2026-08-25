@@ -8,12 +8,12 @@ import { AppError } from "../../shared/utils/app-error";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
+// Fix (issue #1): roadSegmentId/incidentTypeId dropped from the input — the
+// client can't legitimately know these cuid()s. incidentTypeLabel replaces
+// incidentTypeId (same enum already used by seed.ts); roadSegmentId is now
+// resolved server-side in incident.service.ts from latitude/longitude.
 const createIncidentSchema = z.object({
-  // cuid() matches Prisma's default id format (RoadSegment/IncidentType ids)
-  // — rejects malformed identifiers with a 422 before a database call is
-  // even made, instead of letting a bad id reach the SQL layer.
-  roadSegmentId: z.string().cuid("roadSegmentId must be a valid identifier"),
-  incidentTypeId: z.string().cuid("incidentTypeId must be a valid identifier"),
+  incidentTypeLabel: z.enum(["ACCIDENT", "BREAKDOWN", "OBSTACLE", "INSECURITY", "MEDICAL_EMERGENCY"]),
   latitude: z.coerce.number().min(-90, "latitude must be between -90 and 90").max(90, "latitude must be between -90 and 90"),
   longitude: z.coerce.number().min(-180, "longitude must be between -180 and 180").max(180, "longitude must be between -180 and 180"),
   direction: z.enum(["OUTBOUND", "RETURN", "BOTH"]),
