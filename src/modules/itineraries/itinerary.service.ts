@@ -1,10 +1,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "../../shared/config/database";
 import { AppError } from "../../shared/utils/app-error";
-import {
-  routingProvider,
-  type LatLng,
-} from "../../shared/providers/routing.provider";
+import { routingProvider, type LatLng } from "../../shared/providers/routing.provider";
 
 export interface CreateItineraryInput {
   userId: string;
@@ -71,11 +68,21 @@ export async function getItineraryById(id: string) {
   const itinerary = rows[0];
   if (!itinerary) return null;
 
+  // Fix (issue, Phase 2 — "enrich incident responses"): same joins as
+  // incident.service.ts (IncidentType, RoadSegment → RouteAxis) so incidents
+  // superposed on a trip carry a readable type/axis, not opaque cuid()s.
   const incidentsOnRoute = await prisma.$queryRaw<any[]>`
-    SELECT DISTINCT i.id, i.direction, i."roadStatus", i."photoUrl", i.status,
+    SELECT DISTINCT i.id,
+      it.label AS "incidentTypeLabel",
+      ra.code AS "axisCode",
+      rs."pkStart", rs."pkEnd",
+      i.direction, i."roadStatus", i."photoUrl", i.status,
       i."reportedAt", i."lastConfirmedAt",
       ST_Y(i.position) AS latitude, ST_X(i.position) AS longitude
     FROM "Incident" i
+    JOIN "IncidentType" it ON it.id = i."incidentTypeId"
+    JOIN "RoadSegment" rs ON rs.id = i."roadSegmentId"
+    JOIN "RouteAxis" ra ON ra.id = rs."routeAxisId"
     JOIN "ItinerarySegment" seg ON seg."roadSegmentId" = i."roadSegmentId"
     WHERE seg."itineraryId" = ${id}
       AND i.status = 'ACTIVE'::"IncidentStatus";
@@ -88,13 +95,8 @@ export async function getItineraryById(id: string) {
  * "1 favorite max on a free account" — application rule (cf. schema.prisma
  * closing note), not a DB constraint. Idempotent if already favorite.
  */
-export async function markItineraryFavorite(
-  itineraryId: string,
-  userId: string,
-) {
-  const itinerary = await prisma.itinerary.findUnique({
-    where: { id: itineraryId },
-  });
+export async function markItineraryFavorite(itineraryId: string, userId: string) {
+  const itinerary = await prisma.itinerary.findUnique({ where: { id: itineraryId } });
   if (!itinerary) {
     throw new AppError(`Itinerary not found: ${itineraryId}`, 404);
   }
