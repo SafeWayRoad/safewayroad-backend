@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../shared/config/database";
 import { AppError } from "../../shared/utils/app-error";
 
@@ -10,14 +11,13 @@ import { AppError } from "../../shared/utils/app-error";
  * ST_Distance...).
  *
  * Security note: every interpolated value below (${...}) goes through
- * Prisma's tagged-template mechanism, which binds it as a query parameter
- * (prepared statement) rather than concatenating it into the SQL text. This
- * is the same mechanism as parameterized queries in any other SQL driver —
- * user input is never spliced into the query string itself, so this is not
- * vulnerable to SQL injection. Table/column names and the query structure
- * are always static strings written by us, never built from request input.
- * (This protection only holds for prisma.$queryRaw / $executeRaw as used
- * here — never switch this to $queryRawUnsafe / $executeRawUnsafe.)
+ * Prisma's tagged-template mechanism (including the Prisma.sql fragments
+ * used for the optional axisCode filter below), which binds it as a query
+ * parameter (prepared statement) rather than concatenating it into the SQL
+ * text. Table/column names and the query structure are always static
+ * strings written by us, never built from request input. (This protection
+ * only holds for prisma.$queryRaw / $executeRaw / Prisma.sql as used here —
+ * never switch this to $queryRawUnsafe / $executeRawUnsafe.)
  */
 
 export type IncidentTypeLabelInput =
@@ -38,16 +38,14 @@ export interface CreateIncidentInput {
 }
 
 /**
- * Fix (issue #1): the client no longer supplies roadSegmentId/incidentTypeId
- * (cuid()s it has no legitimate way to know — no endpoint ever exposed them).
- * Instead:
+ * Fix (issue #1, Phase 2): the client no longer supplies roadSegmentId/
+ * incidentTypeId (cuid()s it has no legitimate way to know — no endpoint
+ * ever exposed them). Instead:
  *  - incidentTypeLabel is resolved to its id via a direct lookup (fixed set
  *    of 5 enum values, seeded in prisma/seed.ts).
  *  - roadSegmentId is resolved server-side to the nearest RoadSegment using
  *    PostGIS's KNN "<->" operator, which uses the existing GiST index
- *    (idx_road_segment_geom) — this is the design already documented in
- *    sequence_02_signalement_incident.mermaid (ST_ClosestPoint rattachement),
- *    just not what Phase 1 actually implemented.
+ *    (idx_road_segment_geom).
  */
 export async function createIncident(input: CreateIncidentInput) {
   const incidentType = await prisma.incidentType.findUnique({
@@ -94,30 +92,68 @@ export async function createIncident(input: CreateIncidentInput) {
   return getIncidentById(id);
 }
 
+/**
+ * Fix (issue, Phase 2 — "enrich incident responses"): joins IncidentType and
+ * RoadSegment → RouteAxis so the client gets a readable incidentTypeLabel,
+ * axisCode and PK range instead of opaque cuid()s. Additive only — every
+ * field previously returned is still present, nothing renamed or removed.
+ * Cf. cahier des charges §4.2 (fiche détaillée : axe, repère PK, type).
+ */
 export async function getIncidentById(id: string) {
   const rows = await prisma.$queryRaw<any[]>`
     SELECT
-      id, "roadSegmentId", "incidentTypeId", "reportedById",
-      ST_Y(position) AS latitude,
-      ST_X(position) AS longitude,
-      direction, "roadStatus", "photoUrl",
-      status, "reportedAt", "lastConfirmedAt"
-    FROM "Incident"
-    WHERE id = ${id};
+      i.id, i."roadSegmentId", i."incidentTypeId", i."reportedById",
+      it.label AS "incidentTypeLabel",
+      ra.code AS "axisCode",
+      rs."pkStart", rs."pkEnd",
+      ST_Y(i.position) AS latitude,
+      ST_X(i.position) AS longitude,
+      i.direction, i."roadStatus", i."photoUrl",
+      i.status, i."reportedAt", i."lastConfirmedAt"
+    FROM "Incident" i
+    JOIN "IncidentType" it ON it.id = i."incidentTypeId"
+    JOIN "RoadSegment" rs ON rs.id = i."roadSegmentId"
+    JOIN "RouteAxis" ra ON ra.id = rs."routeAxisId"
+    WHERE i.id = ${id};
   `;
   return rows[0] ?? null;
 }
 
-export async function listActiveIncidents() {
+export interface ListActiveIncidentsFilters {
+  /**
+   * Optional axis filter (e.g. "N3"). Applied server-side, not just
+   * client-side, per cahier des charges §7.4 / architecture technique §11:
+   * loading the map filtered by axis is meant to reduce data usage on weak
+   * connections, which only works if the filter narrows what's downloaded.
+   */
+  axisCode?: string;
+}
+
+export async function listActiveIncidents(filters: ListActiveIncidentsFilters = {}) {
+  // Prisma.sql / Prisma.empty compose an optional SQL fragment while
+  // keeping every interpolated value bound as a query parameter — same
+  // injection-safety guarantee as the plain $queryRaw tagged template used
+  // everywhere else in this file, just applied to a conditional clause.
+  const axisFilter = filters.axisCode
+    ? Prisma.sql`AND ra.code = ${filters.axisCode}`
+    : Prisma.empty;
+
   return prisma.$queryRaw<any[]>`
     SELECT
-      id, "roadSegmentId", "incidentTypeId",
-      ST_Y(position) AS latitude,
-      ST_X(position) AS longitude,
-      direction, "roadStatus", "photoUrl",
-      status, "reportedAt", "lastConfirmedAt"
-    FROM "Incident"
-    WHERE status = 'ACTIVE'::"IncidentStatus"
-    ORDER BY "reportedAt" DESC;
+      i.id, i."roadSegmentId", i."incidentTypeId",
+      it.label AS "incidentTypeLabel",
+      ra.code AS "axisCode",
+      rs."pkStart", rs."pkEnd",
+      ST_Y(i.position) AS latitude,
+      ST_X(i.position) AS longitude,
+      i.direction, i."roadStatus", i."photoUrl",
+      i.status, i."reportedAt", i."lastConfirmedAt"
+    FROM "Incident" i
+    JOIN "IncidentType" it ON it.id = i."incidentTypeId"
+    JOIN "RoadSegment" rs ON rs.id = i."roadSegmentId"
+    JOIN "RouteAxis" ra ON ra.id = rs."routeAxisId"
+    WHERE i.status = 'ACTIVE'::"IncidentStatus"
+    ${axisFilter}
+    ORDER BY i."reportedAt" DESC;
   `;
 }

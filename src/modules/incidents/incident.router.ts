@@ -20,9 +20,21 @@ const createIncidentSchema = z.object({
   roadStatus: z.enum(["BLOCKED", "PARTIAL", "CLEAR"]),
 });
 
-router.get("/incidents", async (_req, res, next) => {
+// Fix (issue, Phase 2 — "axis filtering"): optional ?axisCode= query param,
+// applied server-side (cf. incident.service.ts) so filtering actually
+// reduces what's downloaded, not just what's displayed.
+const listIncidentsQuerySchema = z.object({
+  axisCode: z.string().trim().min(1, "axisCode must not be empty").optional(),
+});
+
+router.get("/incidents", async (req, res, next) => {
   try {
-    const incidents = await listActiveIncidents();
+    const parsed = listIncidentsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.issues.map((i) => i.message).join(", "), 422);
+    }
+
+    const incidents = await listActiveIncidents({ axisCode: parsed.data.axisCode });
     res.json({ status: true, data: incidents });
   } catch (err) {
     next(err);

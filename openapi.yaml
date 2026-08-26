@@ -300,6 +300,12 @@ paths:
       tags: [Incidents]
       summary: Liste les incidents actifs
       security: []
+      parameters:
+        - name: axisCode
+          in: query
+          required: false
+          description: Filtre les incidents sur un axe routier donné (ex. N1, N3, N4)
+          schema: { type: string }
       responses:
         "200":
           description: Liste des incidents actifs
@@ -581,6 +587,11 @@ components:
         id: { type: string }
         roadSegmentId: { type: string }
         incidentTypeId: { type: string }
+        incidentTypeLabel:
+          $ref: "#/components/schemas/IncidentTypeLabel"
+        axisCode: { type: string, example: "N3" }
+        pkStart: { type: number, nullable: true }
+        pkEnd: { type: number, nullable: true }
         latitude: { type: number }
         longitude: { type: number }
         direction:

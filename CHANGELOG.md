@@ -16,6 +16,12 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Module `itineraries` : `POST /itineraries` (calcul via `RoutingProvider`, rattachement aux
   `RoadSegment` traversés via `ST_Intersects`, incidents actifs superposés) et
   `POST /itineraries/{id}/favorite` (règle "1 favori max en compte gratuit", applicative, idempotente)
+- `GET /incidents` : nouveau paramètre de requête optionnel `axisCode` pour filtrer par axe
+  routier (ex. `?axisCode=N3`), appliqué côté serveur — répond à l'objectif de sobriété data
+  (cahier des charges §7.4, architecture technique §11)
+- Réponses incidents enrichies (`GET /incidents`, incidents superposés sur `POST /itineraries`) :
+  ajout de `incidentTypeLabel`, `axisCode`, `pkStart`, `pkEnd` via jointures `IncidentType` /
+  `RoadSegment` / `RouteAxis` — changement additif, aucun champ existant retiré ou renommé
 
 ### ⚠️ Cassant (breaking change)
 
