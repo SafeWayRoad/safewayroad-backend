@@ -1,12 +1,12 @@
 openapi: 3.0.3
 info:
   title: SafeWayRoad API
-  version: 0.2.0
+  version: 0.3.0
   description: >
     Contrat d'API du MVP SafeWayRoad — signalement d'incidents et planification
     de trajet sur les Routes Nationales du Cameroun. Ce document sert de mémo
-    de référence pendant le développement (Phase 0 → Phase 4 du plan de
-    développement) ; il évoluera au fil de l'implémentation réelle.
+    de référence pendant le développement ; il évoluera au fil de
+    l'implémentation réelle.
 
 servers:
   - url: http://localhost:3000
@@ -123,7 +123,7 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
 
   # ---------------------------------------------------------------------
-  # Utilisateurs et rôles — /users/me implémenté (Phase 1) ; /users/{id}/status reste Phase 3
+  # Utilisateurs et rôles — /users/me implémenté (Phase 1) ; /users/{id}/status Phase 3
   # ---------------------------------------------------------------------
   /users/me:
     get:
@@ -148,7 +148,6 @@ paths:
               properties:
                 phone: { type: string }
                 email: { type: string, format: email }
-
       responses:
         "200":
           description: Profil mis à jour
@@ -293,18 +292,26 @@ paths:
           description: Compte mis à jour
 
   # ---------------------------------------------------------------------
-  # Incidents — implémenté (exemple de référence dans incident.router.ts)
+  # Incidents — implémenté (Phase 1 + corrections/enrichissements Phase 2)
   # ---------------------------------------------------------------------
   /incidents:
     get:
       tags: [Incidents]
       summary: Liste les incidents actifs
+      description: >
+        Renvoie les incidents ACTIVE, enrichis du libellé de type et des
+        informations d'axe/PK (jointures IncidentType / RoadSegment /
+        RouteAxis — cf. cahier des charges §4.2). Ajouté en Phase 2.
       security: []
       parameters:
         - name: axisCode
           in: query
           required: false
-          description: Filtre les incidents sur un axe routier donné (ex. N1, N3, N4)
+          description: >
+            Filtre les incidents sur un axe routier donné (ex. N1, N3, N4).
+            Appliqué côté serveur pour réduire la donnée téléchargée en
+            zone de connectivité faible (cahier des charges §7.4). Ajouté
+            en Phase 2.
           schema: { type: string }
       responses:
         "200":
@@ -319,10 +326,20 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Incident"
+        "422":
+          description: Paramètre axisCode invalide
 
     post:
       tags: [Incidents]
       summary: Signale un nouvel incident (accessible avec ou sans compte)
+      description: >
+        Le tronçon (roadSegmentId) est résolu automatiquement côté serveur
+        au tronçon le plus proche de la position fournie (PostGIS KNN),
+        conformément au flux documenté dans
+        sequence_02_signalement_incident.mermaid. Le client fournit
+        incidentTypeLabel (enum), jamais un roadSegmentId ni un
+        incidentTypeId — corrigé en Phase 2 (issue backend #1) suite à un
+        écart avec le flux documenté depuis le cadrage.
       security: []
       requestBody:
         required: true
@@ -333,9 +350,8 @@ paths:
               required:
                 [incidentTypeLabel, latitude, longitude, direction, roadStatus]
               properties:
-                IncidentTypeLabel:
-                  type: string
-                  enum: [ACCIDENT, BREAKDOWN, OBSTACLE, INSECURITY, MEDICAL_EMERGENCY]
+                incidentTypeLabel:
+                  $ref: "#/components/schemas/IncidentTypeLabel"
                 latitude: { type: number }
                 longitude: { type: number }
                 direction:
@@ -357,64 +373,76 @@ paths:
                   data:
                     $ref: "#/components/schemas/Incident"
         "422":
-          description: Corps de requête invalide
+          description: "Corps de requête invalide, ou aucun tronçon ne couvre cette position"
 
-    /incidents/{id}/confirmations:
-      post:
-        tags: [Incidents]
-        summary: Confirme qu'un incident est toujours présent ou a été dégagé
-        security: []
-        parameters:
-          - $ref: "#/components/parameters/IdParam"
-        requestBody:
-          required: true
+  /incidents/{id}/confirmations:
+    post:
+      tags: [Incidents]
+      summary: Confirme qu'un incident est toujours présent ou a été dégagé
+      description: >
+        Accessible sans compte (comme le signalement). STILL_THERE met à
+        jour lastConfirmedAt. CLEARED fait passer l'incident en RESOLVED
+        après un seuil de confirmations cumulées (constante
+        CLEARED_RESOLUTION_THRESHOLD = 3, à ajuster avec des données
+        réelles du pilote).
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  $ref: "#/components/schemas/ConfirmationType"
+      responses:
+        "201":
+          description: Confirmation enregistrée
+        "404":
+          description: Incident introuvable
+        "422":
+          description: "Identifiant ou type de confirmation invalide"
+
+  # ---------------------------------------------------------------------
+  # Itinéraires — implémenté (Phase 2)
+  # ---------------------------------------------------------------------
+  /itineraries:
+    post:
+      tags: [Itinéraires]
+      summary: Calcule un itinéraire (via OpenRouteService) et superpose les incidents actifs
+      description: >
+        Nécessite une authentification (Itinerary.userId non-nullable).
+        Le tracé retourné (path) est le GeoJSON calculé par
+        OpenRouteService — jusqu'ici stocké mais jamais relu, corrigé en
+        Phase 2. Les incidents superposés portent les mêmes champs
+        enrichis (incidentTypeLabel, axisCode, pkStart, pkEnd) que
+        GET /incidents.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origin, destination]
+              properties:
+                origin:
+                  $ref: "#/components/schemas/LatLng"
+                destination:
+                  $ref: "#/components/schemas/LatLng"
+      responses:
+        "201":
+          description: Itinéraire calculé
           content:
             application/json:
               schema:
-                type: object
-                required: [type]
-                properties:
-                  type:
-                    $ref: "#/components/schemas/ConfirmationType"
-        responses:
-          "201":
-            description: Confirmation enregistrée
-          "404":
-            description: Incident introuvable
-          "422":
-            description: "Identifiant ou type de confirmation invalide"
-
-    # ---------------------------------------------------------------------
-    # Itinéraires —  implémenté
-    # ---------------------------------------------------------------------
-    /itineraries:
-      post:
-        tags: [Itinéraires]
-        summary: Calcule un itinéraire (via OpenRouteService) et superpose les incidents actifs
-        # requiert une authentification (bearerAuth par défaut)
-        requestBody:
-          required: true
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [origin, destination]
-                properties:
-                  origin:
-                    $ref: "#/components/schemas/LatLng"
-                  destination:
-                    $ref: "#/components/schemas/LatLng"
-        responses:
-          "201":
-            description: Itinéraire calculé
-            content:
-              application/json:
-                schema:
-                  $ref: "#/components/schemas/Itinerary"
-          "401":
-            description: Authentification requise
-          "422":
-            description: Coordonnées invalides
+                $ref: "#/components/schemas/Itinerary"
+        "401":
+          description: Authentification requise
+        "422":
+          description: Coordonnées invalides
 
   /itineraries/{id}/favorite:
     post:
@@ -565,6 +593,10 @@ components:
         latitude: { type: number }
         longitude: { type: number }
 
+    IncidentTypeLabel:
+      type: string
+      enum: [ACCIDENT, BREAKDOWN, OBSTACLE, INSECURITY, MEDICAL_EMERGENCY]
+
     Direction:
       type: string
       enum: [OUTBOUND, RETURN, BOTH]
@@ -583,6 +615,11 @@ components:
 
     Incident:
       type: object
+      description: >
+        incidentTypeLabel, axisCode, pkStart et pkEnd sont résolus côté
+        serveur via jointure (IncidentType, RoadSegment, RouteAxis) —
+        ajoutés en Phase 2, le client n'a jamais besoin de résoudre un
+        cuid() lui-même (cahier des charges §4.2).
       properties:
         id: { type: string }
         roadSegmentId: { type: string }
@@ -608,11 +645,20 @@ components:
       type: object
       properties:
         id: { type: string }
+        userId: { type: string }
         origin:
           $ref: "#/components/schemas/LatLng"
         destination:
           $ref: "#/components/schemas/LatLng"
+        path:
+          type: object
+          description: >
+            Tracé GeoJSON (LineString) calculé par OpenRouteService.
+            Stocké depuis la Phase 2 initiale mais jamais relu par
+            l'API avant correction (Phase 2, fix "expose-itinerary-path").
+          nullable: true
         isFavorite: { type: boolean }
+        createdAt: { type: string, format: date-time }
         incidentsOnRoute:
           type: array
           items:

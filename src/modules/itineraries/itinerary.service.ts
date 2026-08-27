@@ -57,11 +57,13 @@ export async function createItinerary(input: CreateItineraryInput) {
 }
 
 export async function getItineraryById(id: string) {
+  
   const rows = await prisma.$queryRaw<any[]>`
     SELECT
       id, "userId", "isFavorite", "createdAt",
       ST_Y("startPoint") AS "originLatitude", ST_X("startPoint") AS "originLongitude",
-      ST_Y("endPoint") AS "destinationLatitude", ST_X("endPoint") AS "destinationLongitude"
+      ST_Y("endPoint") AS "destinationLatitude", ST_X("endPoint") AS "destinationLongitude",
+      ST_AsGeoJSON(path) AS "pathGeoJson"
     FROM "Itinerary"
     WHERE id = ${id};
   `;
