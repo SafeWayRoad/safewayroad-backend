@@ -22,6 +22,9 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Réponses incidents enrichies (`GET /incidents`, incidents superposés sur `POST /itineraries`) :
   ajout de `incidentTypeLabel`, `axisCode`, `pkStart`, `pkEnd` via jointures `IncidentType` /
   `RoadSegment` / `RouteAxis` — changement additif, aucun champ existant retiré ou renommé
+  - `GET`/`POST /itineraries` : le tracé (`path`) est désormais renvoyé en GeoJSON
+  (`ST_AsGeoJSON`) — jusqu'ici calculé et stocké mais jamais relu, empêchant l'affichage du
+  trajet côté frontend (tâche #3)
 
 ### ⚠️ Cassant (breaking change)
 
