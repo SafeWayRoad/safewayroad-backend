@@ -103,8 +103,12 @@ model RoadSegment {
   pkStart Float?
   pkEnd   Float?
 
-  // PostGIS geometry column — not natively supported by Prisma.
-  // Insert/read/query via prisma.$queryRaw / $executeRaw.
+  // Identifiant du way OSM d'origine — permet de relancer le script
+  // d'import sans dupliquer les tronçons (upsert). Null pour tout segment
+  // créé manuellement (aucun cas actuellement, hors le segment de test
+  // historique qui sera supprimé après vérification).
+  osmWayId BigInt? @unique
+
   geom Unsupported("geometry(LineString, 4326)")
 
   routeAxisId String

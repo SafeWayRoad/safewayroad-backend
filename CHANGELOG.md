@@ -23,8 +23,14 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
   ajout de `incidentTypeLabel`, `axisCode`, `pkStart`, `pkEnd` via jointures `IncidentType` /
   `RoadSegment` / `RouteAxis` — changement additif, aucun champ existant retiré ou renommé
   - `GET`/`POST /itineraries` : le tracé (`path`) est désormais renvoyé en GeoJSON
-  (`ST_AsGeoJSON`) — jusqu'ici calculé et stocké mais jamais relu, empêchant l'affichage du
-  trajet côté frontend (tâche #3)
+    (`ST_AsGeoJSON`) — jusqu'ici calculé et stocké mais jamais relu, empêchant l'affichage du
+    trajet côté frontend (tâche #3)
+  - Import du réseau routier national OpenStreetMap (`scripts/import-osm-road-network.ts`,
+    `npm run import:osm-roads`) : 2018 tronçons importés sur 21 axes (N1-N21), PK calculé par
+    distance cumulée (parcours BFS). Remplace le segment de test créé en Phase 1.
+    `RoadSegment.osmWayId` ajouté (rejouabilité). Périmètre étendu au réseau national complet
+    (au-delà de N1/N3/N4 initialement documenté) — cahier_des_charges_fonctionnel.docx §1.1/§2.1
+    et architecture_technique.md §6/§13 mis à jour en conséquence
 
 ### ⚠️ Cassant (breaking change)
 
