@@ -426,8 +426,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [origin, destination]
+              required: [name, origin, destination]
               properties:
+                name: { type: string, example: "Trajet Douala-Yaoundé" }
                 origin:
                   $ref: "#/components/schemas/LatLng"
                 destination:
@@ -459,6 +460,33 @@ paths:
           description: "Itinéraire d'un autre utilisateur, ou limite de favoris atteinte pour un compte gratuit"
         "404":
           description: Itinéraire introuvable
+
+  /itineraries/{id}:
+    patch:
+      tags: [Itinéraires]
+      summary: Renomme un itinéraire (propriétaire uniquement)
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 120 }
+      responses:
+        "200":
+          description: Itinéraire renommé
+        "401":
+          description: Authentification requise
+        "403":
+          description: Itinéraire d'un autre utilisateur
+        "404":
+          description: Itinéraire introuvable
+        "422":
+          description: Nom invalide (vide ou trop long)
 
   # ---------------------------------------------------------------------
   # Trajets — non implémenté (Phase 4)
@@ -645,6 +673,7 @@ components:
       type: object
       properties:
         id: { type: string }
+        name: { type: string, example: "Trajet Douala-Yaoundé" }
         userId: { type: string }
         origin:
           $ref: "#/components/schemas/LatLng"

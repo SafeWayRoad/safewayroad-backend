@@ -34,6 +34,11 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### ⚠️ Cassant (breaking change)
 
+- **`POST /itineraries` exige désormais `name` (obligatoire, 1-120 caractères).** Anticipe la
+  Phase 3 : les trajets créés par un mini-admin/chef d'équipe devront être identifiables par les
+  chauffeurs qui les suivent. Nouveau `PATCH /itineraries/{id}` pour renommer (propriétaire
+  uniquement). `Itinerary.name` ajouté au schéma (migration `add_itinerary_name`).
+
 - **`POST /incidents` : `roadSegmentId`/`incidentTypeId` remplacés par la résolution automatique
   côté serveur.** Le client ne peut légitimement pas connaître ces `cuid()` (aucun endpoint ne les
   a jamais exposés) — corrige un écart entre l'implémentation Phase 1 et le flux documenté depuis
