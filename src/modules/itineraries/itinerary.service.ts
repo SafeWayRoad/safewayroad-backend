@@ -1,10 +1,14 @@
 import { randomUUID } from "crypto";
 import { prisma } from "../../shared/config/database";
 import { AppError } from "../../shared/utils/app-error";
-import { routingProvider, type LatLng } from "../../shared/providers/routing.provider";
+import {
+  routingProvider,
+  type LatLng,
+} from "../../shared/providers/routing.provider";
 
 export interface CreateItineraryInput {
   userId: string;
+  name: string;
   origin: LatLng;
   destination: LatLng;
 }
@@ -22,9 +26,9 @@ export async function createItinerary(input: CreateItineraryInput) {
   const pathGeoJson = JSON.stringify(route.geometry);
 
   await prisma.$executeRaw`
-    INSERT INTO "Itinerary" (id, "userId", "startPoint", "endPoint", path, "isFavorite", "createdAt")
+    INSERT INTO "Itinerary" (id, "userId", name, "startPoint", "endPoint", path, "isFavorite", "createdAt")
     VALUES (
-      ${id}, ${input.userId},
+      ${id}, ${input.userId}, ${input.name},
       ST_SetSRID(ST_MakePoint(${input.origin.longitude}, ${input.origin.latitude}), 4326),
       ST_SetSRID(ST_MakePoint(${input.destination.longitude}, ${input.destination.latitude}), 4326),
       ST_SetSRID(ST_GeomFromGeoJSON(${pathGeoJson}), 4326),
@@ -57,10 +61,9 @@ export async function createItinerary(input: CreateItineraryInput) {
 }
 
 export async function getItineraryById(id: string) {
-  
   const rows = await prisma.$queryRaw<any[]>`
     SELECT
-      id, "userId", "isFavorite", "createdAt",
+      id, "userId", name, "isFavorite", "createdAt",
       ST_Y("startPoint") AS "originLatitude", ST_X("startPoint") AS "originLongitude",
       ST_Y("endPoint") AS "destinationLatitude", ST_X("endPoint") AS "destinationLongitude",
       ST_AsGeoJSON(path) AS "pathGeoJson"
@@ -70,9 +73,8 @@ export async function getItineraryById(id: string) {
   const itinerary = rows[0];
   if (!itinerary) return null;
 
-  // Fix (issue, Phase 2 — "enrich incident responses"): same joins as
-  // incident.service.ts (IncidentType, RoadSegment → RouteAxis) so incidents
-  // superposed on a trip carry a readable type/axis, not opaque cuid()s.
+  // Same joins as incident.service.ts (IncidentType, RoadSegment → RouteAxis)
+  // so incidents superposed on a trip carry a readable type/axis.
   const incidentsOnRoute = await prisma.$queryRaw<any[]>`
     SELECT DISTINCT i.id,
       it.label AS "incidentTypeLabel",
@@ -97,8 +99,13 @@ export async function getItineraryById(id: string) {
  * "1 favorite max on a free account" — application rule (cf. schema.prisma
  * closing note), not a DB constraint. Idempotent if already favorite.
  */
-export async function markItineraryFavorite(itineraryId: string, userId: string) {
-  const itinerary = await prisma.itinerary.findUnique({ where: { id: itineraryId } });
+export async function markItineraryFavorite(
+  itineraryId: string,
+  userId: string,
+) {
+  const itinerary = await prisma.itinerary.findUnique({
+    where: { id: itineraryId },
+  });
   if (!itinerary) {
     throw new AppError(`Itinerary not found: ${itineraryId}`, 404);
   }
@@ -129,5 +136,30 @@ export async function markItineraryFavorite(itineraryId: string, userId: string)
   return prisma.itinerary.update({
     where: { id: itineraryId },
     data: { isFavorite: true },
+  });
+}
+
+/**
+ * Renames an itinerary — owner only. Straightforward Prisma update (no
+ * geometry column involved), unlike most of this module.
+ */
+export async function renameItinerary(
+  itineraryId: string,
+  userId: string,
+  name: string,
+) {
+  const itinerary = await prisma.itinerary.findUnique({
+    where: { id: itineraryId },
+  });
+  if (!itinerary) {
+    throw new AppError(`Itinerary not found: ${itineraryId}`, 404);
+  }
+  if (itinerary.userId !== userId) {
+    throw new AppError("You cannot modify another user's itinerary", 403);
+  }
+
+  return prisma.itinerary.update({
+    where: { id: itineraryId },
+    data: { name },
   });
 }

@@ -87,12 +87,12 @@ model User {
 }
 
 // ---------------------------------------------------------------------------
-// Road network (Routes Nationales and segments — cf. architecture technique §3)
+// Road network (Routes Nationales and segments — cf. architecture technique §3, §6)
 // ---------------------------------------------------------------------------
 
 model RouteAxis {
   id         String  @id @default(cuid())
-  code       String  @unique // e.g. "N1", "N3", "N4"
+  code       String  @unique // e.g. "N1", "N3", "N21"...
   commonName String?
 
   segments RoadSegment[]
@@ -103,12 +103,13 @@ model RoadSegment {
   pkStart Float?
   pkEnd   Float?
 
-  // Identifiant du way OSM d'origine — permet de relancer le script
-  // d'import sans dupliquer les tronçons (upsert). Null pour tout segment
-  // créé manuellement (aucun cas actuellement, hors le segment de test
-  // historique qui sera supprimé après vérification).
+  // OSM way id — lets the import script be re-run without duplicating rows
+  // (upsert). Null for manually-created segments (none currently, aside
+  // from the historical test segment removed after the OSM import).
   osmWayId BigInt? @unique
 
+  // PostGIS geometry column — not natively supported by Prisma.
+  // Insert/read/query via prisma.$queryRaw / $executeRaw.
   geom Unsupported("geometry(LineString, 4326)")
 
   routeAxisId String
@@ -208,6 +209,13 @@ model Confirmation {
 
 model Itinerary {
   id         String   @id @default(cuid())
+  // Required (decision 28/08/2026): every itinerary must be identifiable by
+  // name — anticipates Phase 3, where a mini-admin/team lead will create
+  // itineraries that drivers follow without editing rights, and both sides
+  // will need a way to tell trips apart. Assignment/read-only ownership
+  // itself is NOT implemented here — out of scope, to be designed as part
+  // of the Phase 3 development plan.
+  name       String
   isFavorite Boolean  @default(false)
   createdAt  DateTime @default(now())
 
