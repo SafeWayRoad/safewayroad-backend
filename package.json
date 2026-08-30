@@ -1,6 +1,6 @@
 {
   "name": "safewayroad-backend",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "API backend de SafeWayRoad — signalement d'incidents et planification de trajet sur les Routes Nationales du Cameroun",
   "main": "dist/server.js",
   "type": "commonjs",
