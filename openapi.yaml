@@ -122,6 +122,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuthResponse"
 
+  /auth/google:
+    post:
+      tags: [Authentification]
+      summary: Connexion ou inscription via Google (flux ID Token)
+      description: >
+        Le client envoie le token d'identité obtenu via Google Identity
+        Services (jamais le mot de passe Google). Si l'email vérifié
+        correspond à un compte existant, il est lié automatiquement
+        (decision 28/08/2026) ; sinon un nouveau compte USER/FREE est créé.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idToken]
+              properties:
+                idToken: { type: string }
+      responses:
+        "200":
+          description: Connexion réussie (compte existant ou nouvellement créé)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: "Token Google invalide, email non vérifié, ou compte désactivé"
+
   # ---------------------------------------------------------------------
   # Utilisateurs et rôles — /users/me implémenté (Phase 1) ; /users/{id}/status Phase 3
   # ---------------------------------------------------------------------
