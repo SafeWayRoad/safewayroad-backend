@@ -60,10 +60,22 @@ model Team {
 }
 
 model User {
-  id            String        @id @default(cuid())
-  phone         String?       @unique
-  email         String?       @unique
-  passwordHash  String
+  id    String  @id @default(cuid())
+  phone String? @unique
+  email String? @unique
+
+  // Nullable (decision 28/08/2026): accounts created via Google sign-in
+  // have no local password. POST /auth/login must reject accounts with
+  // passwordHash = null rather than attempting bcrypt.compare against
+  // null — see auth.service.ts loginUser().
+  passwordHash String?
+
+  // Google account identifier (the "sub" claim of the verified ID token).
+  // Set on first Google sign-in, or on auto-link when a Google sign-in
+  // matches an existing phone/email account by verified email (decision
+  // 28/08/2026) — cf. auth.service.ts loginWithGoogle().
+  googleId String? @unique
+
   accountStatus AccountStatus @default(FREE)
   isActive      Boolean       @default(true)
   createdAt     DateTime      @default(now())
@@ -211,10 +223,7 @@ model Itinerary {
   id         String   @id @default(cuid())
   // Required (decision 28/08/2026): every itinerary must be identifiable by
   // name — anticipates Phase 3, where a mini-admin/team lead will create
-  // itineraries that drivers follow without editing rights, and both sides
-  // will need a way to tell trips apart. Assignment/read-only ownership
-  // itself is NOT implemented here — out of scope, to be designed as part
-  // of the Phase 3 development plan.
+  // itineraries that drivers follow without editing rights.
   name       String
   isFavorite Boolean  @default(false)
   createdAt  DateTime @default(now())

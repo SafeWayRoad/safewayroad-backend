@@ -32,6 +32,15 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
     (au-delà de N1/N3/N4 initialement documenté) — cahier_des_charges_fonctionnel.docx §1.1/§2.1
     et architecture_technique.md §6/§13 mis à jour en conséquence
 
+### Ajouté
+
+- Authentification Google (`POST /auth/google`, flux ID Token via `google-auth-library`) :
+  connexion ou création automatique de compte (rôle USER, statut FREE). Liaison automatique
+  si l'email vérifié par Google correspond à un compte existant créé par téléphone/email.
+  `User.passwordHash` devient nullable (comptes Google sans mot de passe local), nouveau champ
+  `User.googleId` (unique). `POST /auth/login` refuse explicitement les comptes sans mot de
+  passe local plutôt que de comparer contre `null`.
+
 ### ⚠️ Cassant (breaking change)
 
 - **`POST /itineraries` exige désormais `name` (obligatoire, 1-120 caractères).** Anticipe la

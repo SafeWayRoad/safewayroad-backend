@@ -1,8 +1,14 @@
 import bcrypt from "bcryptjs";
+import { OAuth2Client } from "google-auth-library";
 import { Prisma, RoleName } from "@prisma/client";
 import { prisma } from "../../shared/config/database";
+import { env } from "../../shared/config/env";
 import { AppError } from "../../shared/utils/app-error";
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../shared/utils/jwt";
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+} from "../../shared/utils/jwt";
 
 const SALT_ROUNDS = 10;
 
@@ -83,7 +89,10 @@ export async function registerUser(input: RegisterInput): Promise<AuthResult> {
   const role = await prisma.role.findUnique({ where: { name: "USER" } });
   if (!role) {
     // The USER role must be seeded (prisma/seed.ts) before any sign-up.
-    throw new AppError("Incomplete server configuration (USER role missing)", 500);
+    throw new AppError(
+      "Incomplete server configuration (USER role missing)",
+      500,
+    );
   }
 
   const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
@@ -116,8 +125,9 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
   });
 
   // Deliberately identical message (unknown identifier / wrong password /
-  // disabled account) so as not to reveal whether an identifier exists.
-  if (!user || !user.isActive) {
+  // disabled account / Google-only account with no password) so as not to
+  // reveal whether an identifier exists or how the account was created.
+  if (!user || !user.isActive || !user.passwordHash) {
     throw new AppError("Invalid credentials", 401);
   }
 
@@ -129,7 +139,9 @@ export async function loginUser(input: LoginInput): Promise<AuthResult> {
   return buildAuthResult(user);
 }
 
-export async function refreshAccessToken(refreshToken: string): Promise<AuthResult> {
+export async function refreshAccessToken(
+  refreshToken: string,
+): Promise<AuthResult> {
   let payload;
   try {
     payload = verifyRefreshToken(refreshToken);
@@ -143,6 +155,119 @@ export async function refreshAccessToken(refreshToken: string): Promise<AuthResu
   });
 
   if (!user || !user.isActive) {
+    throw new AppError("Account not found or disabled", 401);
+  }
+
+  return buildAuthResult(user);
+}
+
+// ---------------------------------------------------------------------------
+// Google sign-in (decision 28/08/2026) — cf. architecture technique note to
+// be added, cahier des charges §4.5 to be extended. ID-token flow: the
+// frontend obtains a signed ID token from Google Identity Services and sends
+// it here for verification — the backend never sees the user's Google
+// password, only Google's own signed assertion of identity.
+// ---------------------------------------------------------------------------
+
+let googleClient: OAuth2Client | null = null;
+
+function getGoogleClient(): OAuth2Client {
+  if (!env.GOOGLE_CLIENT_ID) {
+    throw new AppError("GOOGLE_CLIENT_ID is not configured", 500);
+  }
+  if (!googleClient) {
+    googleClient = new OAuth2Client(env.GOOGLE_CLIENT_ID);
+  }
+  return googleClient;
+}
+
+interface VerifiedGoogleIdentity {
+  googleId: string;
+  email: string;
+}
+
+async function verifyGoogleIdToken(
+  idToken: string,
+): Promise<VerifiedGoogleIdentity> {
+  const client = getGoogleClient();
+
+  let payload;
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: env.GOOGLE_CLIENT_ID,
+    });
+    payload = ticket.getPayload();
+  } catch {
+    throw new AppError("Invalid Google ID token", 401);
+  }
+
+  if (!payload?.email || !payload.email_verified) {
+    throw new AppError(
+      "Unable to verify Google account (missing or unverified email)",
+      401,
+    );
+  }
+
+  return { googleId: payload.sub, email: payload.email };
+}
+
+export interface GoogleAuthInput {
+  idToken: string;
+}
+
+/**
+ * Sign-in (or sign-up) via Google. Lookup order:
+ *  1. Existing account already linked to this googleId → use it.
+ *  2. Existing account with the same verified email (created via phone/email
+ *     sign-up) → auto-link (decision 28/08/2026: same person, Google already
+ *     verified the email, no separate confirmation step needed).
+ *  3. Neither → create a new account (USER role, FREE status, no password).
+ */
+export async function loginWithGoogle(
+  input: GoogleAuthInput,
+): Promise<AuthResult> {
+  const { googleId, email } = await verifyGoogleIdToken(input.idToken);
+
+  let user = await prisma.user.findUnique({
+    where: { googleId },
+    include: { role: true },
+  });
+
+  if (!user) {
+    const existingByEmail = await prisma.user.findUnique({
+      where: { email },
+      include: { role: true },
+    });
+
+    if (existingByEmail) {
+      user = await prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: { googleId },
+        include: { role: true },
+      });
+    } else {
+      const role = await prisma.role.findUnique({ where: { name: "USER" } });
+      if (!role) {
+        throw new AppError(
+          "Incomplete server configuration (USER role missing)",
+          500,
+        );
+      }
+
+      user = await prisma.user.create({
+        data: {
+          email,
+          googleId,
+          passwordHash: null,
+          roleId: role.id,
+        },
+        include: { role: true },
+      });
+    }
+  }
+
+  if (!user.isActive) {
     throw new AppError("Account not found or disabled", 401);
   }
 
