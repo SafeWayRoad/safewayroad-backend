@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createIncident, listActiveIncidents } from "./incident.service";
 import { uploadIncidentPhoto } from "../../shared/utils/upload";
 import { AppError } from "../../shared/utils/app-error";
+import { paginationQuerySchema, buildPaginationMeta } from "../../shared/utils/pagination";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -23,7 +24,10 @@ const createIncidentSchema = z.object({
 // Fix (issue, Phase 2 — "axis filtering"): optional ?axisCode= query param,
 // applied server-side (cf. incident.service.ts) so filtering actually
 // reduces what's downloaded, not just what's displayed.
-const listIncidentsQuerySchema = z.object({
+// Paginated (issue #18, decision 28/08/2026): merges the shared
+// page/pageSize schema (shared/utils/pagination.ts) with the axisCode
+// filter — both apply together.
+const listIncidentsQuerySchema = paginationQuerySchema.extend({
   axisCode: z.string().trim().min(1, "axisCode must not be empty").optional(),
 });
 
@@ -34,8 +38,13 @@ router.get("/incidents", async (req, res, next) => {
       throw new AppError(parsed.error.issues.map((i) => i.message).join(", "), 422);
     }
 
-    const incidents = await listActiveIncidents({ axisCode: parsed.data.axisCode });
-    res.json({ status: true, data: incidents });
+    const { axisCode, ...pagination } = parsed.data;
+    const { data, total } = await listActiveIncidents({ axisCode }, pagination);
+    res.json({
+      status: true,
+      data,
+      meta: buildPaginationMeta(pagination, total),
+    });
   } catch (err) {
     next(err);
   }

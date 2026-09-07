@@ -328,13 +328,13 @@ paths:
   /incidents:
     get:
       tags: [Incidents]
-      summary: Liste les incidents actifs
+      summary: Liste les incidents actifs, paginé
       description: >
         Renvoie les incidents ACTIVE, enrichis du libellé de type et des
         informations d'axe/PK (jointures IncidentType / RoadSegment /
-        RouteAxis — cf. cahier des charges §4.2). Ajouté en Phase 2.
-        Pagination à ajouter — cf. issue backend dédiée (décision 28/08/2026,
-        standard page/pageSize défini dans shared/utils/pagination.ts).
+        RouteAxis — cf. cahier des charges §4.2). Paginé (issue #18) via le
+        standard page/pageSize partagé (shared/utils/pagination.ts, même
+        forme que GET /route-axes) — combinable avec le filtre axisCode.
       security: []
       parameters:
         - name: axisCode
@@ -346,9 +346,17 @@ paths:
             zone de connectivité faible (cahier des charges §7.4). Ajouté
             en Phase 2.
           schema: { type: string }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
-          description: Liste des incidents actifs
+          description: Liste des incidents actifs (page courante)
           content:
             application/json:
               schema:
@@ -359,8 +367,10 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Incident"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
         "422":
-          description: Paramètre axisCode invalide
+          description: Paramètre axisCode, page ou pageSize invalide
 
     post:
       tags: [Incidents]

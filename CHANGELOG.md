@@ -38,6 +38,8 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- `GET /incidents` : paginé (`page`/`pageSize`), combinable avec le filtre `axisCode` existant —
+  réutilise le standard partagé introduit avec `GET /route-axes` (#17)
 - Authentification Google (`POST /auth/google`, flux ID Token via `google-auth-library`) :
   connexion ou création automatique de compte (rôle USER, statut FREE). Liaison automatique
   si l'email vérifié par Google correspond à un compte existant créé par téléphone/email.
