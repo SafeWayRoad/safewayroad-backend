@@ -44,7 +44,7 @@ paths:
           description: Base de données injoignable
 
   # ---------------------------------------------------------------------
-  # Authentification — implémenté (Phase 1)
+  # Authentification — implémenté (Phase 1 + Google auth Phase 2)
   # ---------------------------------------------------------------------
   /auth/register:
     post:
@@ -322,15 +322,19 @@ paths:
 
   # ---------------------------------------------------------------------
   # Incidents — implémenté (Phase 1 + corrections/enrichissements Phase 2)
+  # Note : GET /incidents n'est PAS ENCORE paginé — cf. issue backend
+  # dédiée à la pagination des endpoints de listing existants.
   # ---------------------------------------------------------------------
   /incidents:
     get:
       tags: [Incidents]
-      summary: Liste les incidents actifs
+      summary: Liste les incidents actifs, paginé
       description: >
         Renvoie les incidents ACTIVE, enrichis du libellé de type et des
         informations d'axe/PK (jointures IncidentType / RoadSegment /
-        RouteAxis — cf. cahier des charges §4.2). Ajouté en Phase 2.
+        RouteAxis — cf. cahier des charges §4.2). Paginé (issue #18) via le
+        standard page/pageSize partagé (shared/utils/pagination.ts, même
+        forme que GET /route-axes) — combinable avec le filtre axisCode.
       security: []
       parameters:
         - name: axisCode
@@ -342,9 +346,17 @@ paths:
             zone de connectivité faible (cahier des charges §7.4). Ajouté
             en Phase 2.
           schema: { type: string }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
-          description: Liste des incidents actifs
+          description: Liste des incidents actifs (page courante)
           content:
             application/json:
               schema:
@@ -355,8 +367,10 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Incident"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
         "422":
-          description: Paramètre axisCode invalide
+          description: Paramètre axisCode, page ou pageSize invalide
 
     post:
       tags: [Incidents]
@@ -434,6 +448,54 @@ paths:
           description: Incident introuvable
         "422":
           description: "Identifiant ou type de confirmation invalide"
+
+  # ---------------------------------------------------------------------
+  # Axes routiers — implémenté (Phase 2, post-import OSM), paginé dès le
+  # départ (décision 28/08/2026) — standard réutilisé sur les futurs
+  # endpoints de listing.
+  # ---------------------------------------------------------------------
+  /route-axes:
+    get:
+      tags: [Incidents]
+      summary: Liste tous les axes routiers (Routes Nationales), paginé
+      description: >
+        Renvoie les RouteAxis connus, découverts dynamiquement lors de
+        l'import OSM (cf. architecture technique §6). Remplace le besoin
+        d'une liste d'axes codée en dur côté frontend. Pagination
+        page/pageSize — standard défini dans shared/utils/pagination.ts,
+        à réutiliser sur GET /incidents et les futurs endpoints de listing
+        (issue backend dédiée).
+      security: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Liste des axes (page courante)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        code: { type: string, example: "N3" }
+                        commonName: { type: string, nullable: true }
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+        "422":
+          description: Paramètre page/pageSize invalide
 
   # ---------------------------------------------------------------------
   # Itinéraires — implémenté (Phase 2)
@@ -576,6 +638,17 @@ components:
       schema: { type: string }
 
   schemas:
+    PaginationMeta:
+      type: object
+      description: >
+        Standard réutilisable sur tous les endpoints de listing paginés
+        (décision 28/08/2026, shared/utils/pagination.ts).
+      properties:
+        page: { type: integer, example: 1 }
+        pageSize: { type: integer, example: 20 }
+        total: { type: integer, example: 21 }
+        totalPages: { type: integer, example: 2 }
+
     HealthResponse:
       type: object
       properties:

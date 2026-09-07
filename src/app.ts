@@ -10,6 +10,7 @@ import userRouter from "./modules/users/user.router";
 import incidentRouter from "./modules/incidents/incident.router";
 import itineraryRouter from "./modules/itineraries/itinerary.router";
 import confirmationRouter from "./modules/confirmations/confirmation.router";
+import axisRouter from "./modules/axes/axis.router";
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use(userRouter);
 app.use(incidentRouter);
 app.use(itineraryRouter);
 app.use(confirmationRouter);
+app.use(axisRouter);
 
 app.use(errorHandler);
 

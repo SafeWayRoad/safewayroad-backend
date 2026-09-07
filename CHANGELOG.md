@@ -38,12 +38,16 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ### Ajouté
 
+- `GET /incidents` : paginé (`page`/`pageSize`), combinable avec le filtre `axisCode` existant —
+  réutilise le standard partagé introduit avec `GET /route-axes` (#17)
 - Authentification Google (`POST /auth/google`, flux ID Token via `google-auth-library`) :
   connexion ou création automatique de compte (rôle USER, statut FREE). Liaison automatique
   si l'email vérifié par Google correspond à un compte existant créé par téléphone/email.
   `User.passwordHash` devient nullable (comptes Google sans mot de passe local), nouveau champ
   `User.googleId` (unique). `POST /auth/login` refuse explicitement les comptes sans mot de
   passe local plutôt que de comparer contre `null`.
+  - `GET /route-axes` : liste tous les axes routiers connus — remplace le besoin d'une liste
+    codée en dur côté frontend (dette technique signalée depuis l'import OSM, `MapPage.tsx`)
 
 ### ⚠️ Cassant (breaking change)
 
